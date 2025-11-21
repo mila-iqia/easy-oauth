@@ -1,0 +1,29 @@
+[project]
+name = "easy-oauth"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Olivier Breuleux", email = "breuleux@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "authlib>=1.6.5",
+    "httpx>=0.28.1",
+    "itsdangerous>=2.2.0",
+    "pyyaml>=6.0.3",
+    "serieux>=0.3.4",
+    "starlette>=0.50.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "fastapi>=0.121.3",
+    "pytest>=9.0.1",
+    "python-multipart>=0.0.20",
+    "uvicorn>=0.38.0",
+]
