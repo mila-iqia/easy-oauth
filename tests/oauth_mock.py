@@ -18,10 +18,12 @@ import time
 from datetime import datetime, timedelta
 from typing import Optional
 import base64
-import uvicorn
 
 from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import JSONResponse
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.backends import default_backend
 
 
 PORT = 29313
@@ -29,12 +31,37 @@ PORT = 29313
 
 app = FastAPI(title="Mock Google OAuth2 Server", version="1.0.0")
 
+# Generate RSA key pair for signing tokens
+_private_key = rsa.generate_private_key(
+    public_exponent=65537, key_size=2048, backend=default_backend()
+)
+_public_key = _private_key.public_key()
 
-def create_mock_id_token(email: str = "test@example.com", sub: str = "123456789") -> str:
-    """Create a mock JWT ID token."""
+# Export public key components for JWKS
+_public_numbers = _public_key.public_numbers()
+_modulus = (
+    base64.urlsafe_b64encode(
+        _public_numbers.n.to_bytes((_public_numbers.n.bit_length() + 7) // 8, "big")
+    )
+    .decode()
+    .rstrip("=")
+)
+_exponent = (
+    base64.urlsafe_b64encode(
+        _public_numbers.e.to_bytes((_public_numbers.e.bit_length() + 7) // 8, "big")
+    )
+    .decode()
+    .rstrip("=")
+)
+
+
+def create_mock_id_token(
+    email: str = "test@example.com", sub: str = "123456789", nonce: Optional[str] = None
+) -> str:
+    """Create a JWT ID token with a real RS256 signature."""
     header = {"alg": "RS256", "typ": "JWT", "kid": "mock_key_id"}
     payload = {
-        "iss": "https://accounts.google.com",
+        "iss": f"http://localhost:{PORT}",
         "aud": "mock_client_id",
         "sub": sub,
         "email": email,
@@ -44,38 +71,67 @@ def create_mock_id_token(email: str = "test@example.com", sub: str = "123456789"
         "family_name": "User",
         "exp": int((datetime.now() + timedelta(hours=1)).timestamp()),
         "iat": int(datetime.now().timestamp()),
-        "hd": "example.com"  # Hosted domain
+        "hd": "example.com",  # Hosted domain
     }
-    
-    header_b64 = base64.urlsafe_b64encode(
-        json.dumps(header).encode()
-    ).decode().rstrip('=')
-    payload_b64 = base64.urlsafe_b64encode(
-        json.dumps(payload).encode()
-    ).decode().rstrip('=')
-    
-    return f"{header_b64}.{payload_b64}.mock_signature"
+
+    # Add nonce if provided
+    if nonce:
+        payload["nonce"] = nonce
+
+    # Encode header and payload
+    header_b64 = (
+        base64.urlsafe_b64encode(json.dumps(header, separators=(",", ":")).encode())
+        .decode()
+        .rstrip("=")
+    )
+    payload_b64 = (
+        base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode())
+        .decode()
+        .rstrip("=")
+    )
+
+    # Create signing input
+    signing_input = f"{header_b64}.{payload_b64}".encode()
+
+    # Sign with private key using RS256 (RSA with SHA-256)
+    signature = _private_key.sign(signing_input, padding.PKCS1v15(), hashes.SHA256())
+
+    # Encode signature
+    signature_b64 = base64.urlsafe_b64encode(signature).decode().rstrip("=")
+
+    return f"{header_b64}.{payload_b64}.{signature_b64}"
 
 
-# Store mock tokens for refresh
+# Store mock tokens for refresh and authorization codes
 mock_token_store = {}
+mock_auth_code_store = {}  # Store nonce and other data for auth codes
 
 
 @app.get("/.well-known/openid-configuration")
 async def openid_configuration():
     """Mock OpenID Connect configuration endpoint."""
-    return JSONResponse({
-        "issuer": f"http://localhost:{PORT}",
-        "authorization_endpoint": f"http://localhost:{PORT}/oauth2/auth",
-        "token_endpoint": f"http://localhost:{PORT}/oauth2/token",
-        "userinfo_endpoint": f"http://localhost:{PORT}/oauth2/userinfo",
-        "jwks_uri": f"http://localhost:{PORT}/oauth2/certs",
-        "response_types_supported": ["code", "token", "id_token"],
-        "subject_types_supported": ["public"],
-        "id_token_signing_alg_values_supported": ["RS256"],
-        "scopes_supported": ["openid", "email", "profile"],
-        "claims_supported": ["iss", "sub", "aud", "exp", "iat", "email", "email_verified"]
-    })
+    return JSONResponse(
+        {
+            "issuer": f"http://localhost:{PORT}",
+            "authorization_endpoint": f"http://localhost:{PORT}/oauth2/auth",
+            "token_endpoint": f"http://localhost:{PORT}/oauth2/token",
+            "userinfo_endpoint": f"http://localhost:{PORT}/oauth2/userinfo",
+            "jwks_uri": f"http://localhost:{PORT}/oauth2/certs",
+            "response_types_supported": ["code", "token", "id_token"],
+            "subject_types_supported": ["public"],
+            "id_token_signing_alg_values_supported": ["RS256"],
+            "scopes_supported": ["openid", "email", "profile"],
+            "claims_supported": [
+                "iss",
+                "sub",
+                "aud",
+                "exp",
+                "iat",
+                "email",
+                "email_verified",
+            ],
+        }
+    )
 
 
 @app.post("/oauth2/token")
@@ -85,81 +141,98 @@ async def token_endpoint(
     refresh_token: Optional[str] = Form(None),
     client_id: Optional[str] = Form(None),
     client_secret: Optional[str] = Form(None),
-    redirect_uri: Optional[str] = Form(None)
+    redirect_uri: Optional[str] = Form(None),
 ):
     """Mock OAuth2 token endpoint - always returns success."""
-    
+
     if grant_type == "authorization_code":
         # Initial token request with authorization code
         access_token = f"mock_access_token_{int(time.time())}"
         new_refresh_token = f"mock_refresh_token_{int(time.time())}"
-        id_token = create_mock_id_token()
-        
+
+        # Retrieve nonce from auth code store if it exists
+        auth_code_data = mock_auth_code_store.get(code, {})
+        nonce = auth_code_data.get("nonce")
+
+        id_token = create_mock_id_token(nonce=nonce)
+
         # Store token data for potential refresh
         mock_token_store[new_refresh_token] = {
             "email": "test@example.com",
             "sub": "123456789",
             "access_token": access_token,
-            "created_at": datetime.now()
+            "created_at": datetime.now(),
         }
-        
-        return JSONResponse({
-            "access_token": access_token,
-            "refresh_token": new_refresh_token,
-            "token_type": "Bearer",
-            "expires_in": 3600,
-            "id_token": id_token,
-            "scope": "openid email profile"
-        })
-    
+
+        # Clean up used auth code
+        if code in mock_auth_code_store:
+            del mock_auth_code_store[code]
+
+        return JSONResponse(
+            {
+                "access_token": access_token,
+                "refresh_token": new_refresh_token,
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "id_token": id_token,
+                "scope": "openid email profile",
+            }
+        )
+
     elif grant_type == "refresh_token":
         # Refresh token request
         if not refresh_token:
             raise HTTPException(status_code=400, detail="refresh_token required")
-        
+
         # Get stored user data or use defaults
-        stored_data = mock_token_store.get(refresh_token, {
-            "email": "test@example.com", 
-            "sub": "123456789"
-        })
-        
+        stored_data = mock_token_store.get(
+            refresh_token, {"email": "test@example.com", "sub": "123456789"}
+        )
+
         new_access_token = f"mock_access_token_refreshed_{int(time.time())}"
         new_id_token = create_mock_id_token(
             email=stored_data.get("email", "test@example.com"),
-            sub=stored_data.get("sub", "123456789")
+            sub=stored_data.get("sub", "123456789"),
         )
-        
+
         # Update stored data
         mock_token_store[refresh_token]["access_token"] = new_access_token
-        
-        return JSONResponse({
-            "access_token": new_access_token,
-            "token_type": "Bearer", 
-            "expires_in": 3600,
-            "id_token": new_id_token
-        })
-    
+
+        return JSONResponse(
+            {
+                "access_token": new_access_token,
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "id_token": new_id_token,
+            }
+        )
+
     else:
         raise HTTPException(
             status_code=400,
-            detail={"error": "unsupported_grant_type", "error_description": f"Grant type '{grant_type}' not supported"}
+            detail={
+                "error": "unsupported_grant_type",
+                "error_description": f"Grant type '{grant_type}' not supported",
+            },
         )
 
 
 @app.get("/oauth2/userinfo")
 async def userinfo_endpoint():
     """Mock OAuth2 userinfo endpoint."""
-    return JSONResponse({
-        "sub": "123456789",
-        "email": "test@example.com", 
-        "email_verified": True,
-        "name": "Test User",
-        "given_name": "Test",
-        "family_name": "User",
-        "picture": "https://example.com/avatar.jpg",
-        "locale": "en",
-        "hd": "example.com"
-    })
+    return JSONResponse(
+        {
+            "sub": "123456789",
+            "email": "test@example.com",
+            "email_verified": True,
+            "name": "Test User",
+            "given_name": "Test",
+            "family_name": "User",
+            "picture": "https://example.com/avatar.jpg",
+            "locale": "en",
+            "hd": "example.com",
+        }
+    )
 
 
 @app.get("/oauth2/auth")
@@ -168,34 +241,43 @@ async def authorize_endpoint(
     redirect_uri: str,
     response_type: str = "code",
     scope: str = "openid email",
-    state: Optional[str] = None
+    state: Optional[str] = None,
+    nonce: Optional[str] = None,
 ):
     """Mock OAuth2 authorization endpoint."""
     from fastapi.responses import RedirectResponse
-    
+
     # Always approve and redirect with mock authorization code
-    params = f"code=mock_auth_code_{int(time.time())}"
+    auth_code = f"mock_auth_code_{int(time.time())}"
+
+    # Store nonce with the auth code for later retrieval
+    if nonce:
+        mock_auth_code_store[auth_code] = {"nonce": nonce}
+
+    params = f"code={auth_code}"
     if state:
         params += f"&state={state}"
-    
+
     return RedirectResponse(url=f"{redirect_uri}?{params}")
 
 
 @app.get("/oauth2/certs")
 async def certs_endpoint():
-    """Mock JWKS endpoint for public keys."""
-    return JSONResponse({
-        "keys": [
-            {
-                "kty": "RSA",
-                "use": "sig",
-                "kid": "mock_key_id",
-                "n": "mock_modulus",
-                "e": "AQAB",
-                "alg": "RS256"
-            }
-        ]
-    })
+    """JWKS endpoint with real public key."""
+    return JSONResponse(
+        {
+            "keys": [
+                {
+                    "kty": "RSA",
+                    "use": "sig",
+                    "kid": "mock_key_id",
+                    "n": _modulus,
+                    "e": _exponent,
+                    "alg": "RS256",
+                }
+            ]
+        }
+    )
 
 
 @app.get("/health")
@@ -212,14 +294,14 @@ async def root():
         "version": "1.0.0",
         "endpoints": {
             "authorization": "/oauth2/auth",
-            "token": "/oauth2/token", 
+            "token": "/oauth2/token",
             "userinfo": "/oauth2/userinfo",
             "jwks": "/oauth2/certs",
-            "openid_configuration": "/.well-known/openid-configuration"
+            "openid_configuration": "/.well-known/openid-configuration",
         },
         "test_commands": {
             "get_token": f"curl -X POST http://localhost:{PORT}/oauth2/token -d 'grant_type=authorization_code&code=test'",
             "refresh_token": f"curl -X POST http://localhost:{PORT}/oauth2/token -d 'grant_type=refresh_token&refresh_token=YOUR_REFRESH_TOKEN'",
-            "get_userinfo": f"curl http://localhost:{PORT}/oauth2/userinfo"
-        }
+            "get_userinfo": f"curl http://localhost:{PORT}/oauth2/userinfo",
+        },
     }
