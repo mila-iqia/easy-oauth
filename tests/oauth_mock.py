@@ -63,6 +63,7 @@ def create_mock_id_token(
     payload = {
         "iss": f"http://localhost:{PORT}",
         "aud": "mock_client_id",
+        "azp": "mock_client_id",
         "sub": sub,
         "email": email,
         "email_verified": True,
@@ -150,9 +151,20 @@ async def token_endpoint(
         access_token = f"mock_access_token_{int(time.time())}"
         new_refresh_token = f"mock_refresh_token_{int(time.time())}"
 
-        # Retrieve nonce from auth code store if it exists
+        # Retrieve nonce and redirect_uri from auth code store if it exists
         auth_code_data = mock_auth_code_store.get(code, {})
         nonce = auth_code_data.get("nonce")
+        stored_redirect_uri = auth_code_data.get("redirect_uri")
+
+        # Validate redirect_uri if it was provided in both the auth and token requests
+        if redirect_uri and stored_redirect_uri and redirect_uri != stored_redirect_uri:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "invalid_grant",
+                    "error_description": "redirect_uri mismatch",
+                },
+            )
 
         id_token = create_mock_id_token(nonce=nonce)
 
@@ -250,13 +262,23 @@ async def authorize_endpoint(
     # Always approve and redirect with mock authorization code
     auth_code = f"mock_auth_code_{int(time.time())}"
 
-    # Store nonce with the auth code for later retrieval
-    if nonce:
-        mock_auth_code_store[auth_code] = {"nonce": nonce}
+    # Store nonce and redirect_uri with the auth code for later retrieval
+    mock_auth_code_store[auth_code] = {
+        "nonce": nonce,
+        "redirect_uri": redirect_uri,
+    }
 
     params = f"code={auth_code}"
     if state:
         params += f"&state={state}"
+
+    # Add id_token and access_token to the response
+    id_token = create_mock_id_token(nonce=nonce)
+    access_token = f"mock_access_token_{int(time.time())}"
+
+    params += f"&id_token={id_token}"
+    params += f"&access_token={access_token}"
+    params += "&token_type=Bearer"
 
     return RedirectResponse(url=f"{redirect_uri}?{params}")
 
