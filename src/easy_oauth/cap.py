@@ -1,6 +1,6 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
 
+from dataclasses import dataclass, field
 
 registered_capabilities = {}
 
@@ -29,19 +29,9 @@ class Capability:
             yield from cap.iter()
 
     def __contains__(self, cap):
-        return cap is self or any(cap2.has(cap) for cap2 in self.implies)
+        return cap is self or any(cap in cap2 for cap2 in self.implies)
 
     def __str__(self):
         return self.name or "&".join(map(str, self.implies)) or "none"
 
     __repr__ = __str__
-
-    @classmethod
-    def serieux_from_string(cls, s):
-        registry = cls.__registry__
-        return registry[s]
-
-    @classmethod
-    def serieux_from_list(cls, caps):
-        registry = cls.__registry__
-        return cls(implies={registry[s] for s in caps})

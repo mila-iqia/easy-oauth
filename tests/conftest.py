@@ -3,13 +3,15 @@
 import random
 import threading
 import time
-from typing import Generator
+from dataclasses import dataclass
 
+import httpx
 import pytest
 import uvicorn
 
-from .oauth_mock import app as oauth_app, PORT as OAUTH_PORT
 from .app import make_app
+from .oauth_mock import PORT as OAUTH_PORT
+from .oauth_mock import app as oauth_app
 
 
 class ServerThread(threading.Thread):
@@ -29,7 +31,7 @@ class ServerThread(threading.Thread):
             host=self.host,
             port=self.port,
             log_level="error",  # Suppress logs during tests
-            access_log=False
+            access_log=False,
         )
         self.server = uvicorn.Server(config)
         self.server.run()
@@ -55,6 +57,7 @@ def create_endpoint(app, host, port):
     for _ in range(max_retries):
         try:
             import httpx
+
             with httpx.Client() as client:
                 response = client.get(f"{base_url}/health", timeout=1.0)
                 if response.status_code == 200:
@@ -79,6 +82,47 @@ def oauth_endpoint():
         str: The base URL of the mock OAuth server (e.g., "http://127.0.0.1:29313")
     """
     yield from create_endpoint(oauth_app, "127.0.0.1", OAUTH_PORT)
+
+
+@pytest.fixture
+def set_email(oauth_endpoint):
+    def set_email(email):
+        response = httpx.post(f"{oauth_endpoint}/set_email", data={"email": email})
+        assert response.status_code == 200
+        return email
+
+    try:
+        yield set_email
+    finally:
+        set_email("test@example.com")
+
+
+@dataclass
+class TokenInteractor:
+    root: str
+    email: str
+    token: str
+
+    def get(self, endpoint, expect=200, **data):
+        response = httpx.get(
+            f"{self.root}{endpoint}",
+            headers={"Authorization": f"Bearer {self.token}"},
+            params=data,
+        )
+        assert response.status_code == expect
+        return response
+
+
+@pytest.fixture
+def user(app, set_email):
+    def make_interactor(email):
+        set_email(email)
+        response = httpx.get(f"{app}/token", follow_redirects=True)
+        assert response.status_code == 200
+        token = response.json()["refresh_token"]
+        return TokenInteractor(app, email, token)
+
+    yield make_interactor
 
 
 @pytest.fixture(scope="session")

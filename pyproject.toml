@@ -27,3 +27,10 @@ dev = [
     "python-multipart>=0.0.20",
     "uvicorn>=0.38.0",
 ]
+
+[tool.ruff]
+line-length = 99
+
+[tool.ruff.lint]
+extend-select = ["I"]
+ignore = ["E241", "F722", "E501", "E203", "F811", "F821"]

@@ -1,8 +1,9 @@
 import base64
-from dataclasses import dataclass, field
 import json
-from serieux import deserialize
+from dataclasses import dataclass, field
+
 import httpx
+from serieux import deserialize
 
 from .cap import Capability
 

@@ -1,17 +1,22 @@
 from __future__ import annotations
+
+import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from functools import wraps
-import secrets
+from functools import cached_property
+from pathlib import Path
 
 import httpx
+from authlib.integrations.starlette_client import OAuth
 from serieux import deserialize, serialize
 from serieux.features.encrypt import Secret
+from serieux.features.registered import Registry
 from starlette.exceptions import HTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse
-from authlib.integrations.starlette_client import OAuth
+
+from .cap import Capability
 from .structs import OpenIDConfiguration, Payload, UserInfo
 
 
@@ -24,6 +29,10 @@ class OAuthManager:
     client_id: Secret[str] = None
     client_secret: Secret[str] = None
     enable: bool = True
+    capability_file: Path = None
+
+    # [ignore]
+    available_capabilities: dict[str, Capability] = field(default_factory=dict)
 
     # [ignore]
     server_metadata: OpenIDConfiguration = None
@@ -32,9 +41,20 @@ class OAuthManager:
     token_cache: dict = field(default_factory=dict)
 
     def __post_init__(self):
-        self.server_metadata = deserialize(
-            OpenIDConfiguration, self.server_metadata_url
+        self.server_metadata = deserialize(OpenIDConfiguration, self.server_metadata_url)
+
+    def register_capability(self, cap: Capability):
+        self.available_capabilities[cap.name] = cap
+
+    @cached_property
+    def capability_dict(self):
+        return deserialize(
+            dict[str, set[Capability @ Registry(self.available_capabilities)]],
+            self.capability_file,
         )
+
+    def has_capability(self, email, cap):
+        return cap in Capability(implies=self.capability_dict.get(email, set()))
 
     async def get_user(self, request: Request):
         if auth := request.headers.get("Authorization"):
@@ -47,27 +67,39 @@ class OAuthManager:
                     else:
                         raise HTTPException(status_code=401, detail="Invalid user")
                 case _:
-                    raise HTTPException(
-                        status_code=401, detail="Malformed authorization"
-                    )
+                    raise HTTPException(status_code=401, detail="Malformed authorization")
         return request.session.get("user")
 
     async def get_email(self, request: Request):
         user = await self.get_user(request)
         return user["email"] if user is not None else user
 
-    # def email_with_capability(self, cap=None):
-    #     async def get_user(request: Request):
-    #         email = await self.get_email(request)
-    #         if email is not None:
-    #             if cap is None or self.capset.hascap(email, cap):
-    #                 yield email
-    #             else:
-    #                 raise HTTPException(status_code=403, detail=f"{cap} capability required")
-    #         else:
-    #             raise HTTPException(status_code=401, detail="Authentication required")
+    async def ensure_email(self, request: Request):
+        user = await self.get_user(request)
+        if user is None:
+            request.session["redirect_after_login"] = str(request.url)
+            raise HTTPException(
+                status_code=307,
+                headers={"Location": str(request.url_for("login"))},
+            )
+        else:
+            return user["email"]
 
-    #     return get_user
+    def get_email_capability(self, cap=None, redirect=False):
+        async def get(request: Request):
+            if redirect:
+                email = await self.ensure_email(request)
+            else:
+                email = await self.get_email(request)
+            if email is not None:
+                if cap is None or self.has_capability(email, cap):
+                    yield email
+                else:
+                    raise HTTPException(status_code=403, detail=f"{cap} capability required")
+            else:
+                raise HTTPException(status_code=401, detail="Authentication required")
+
+        return get
 
     async def user_from_refresh_token(self, rtoken):
         match self.token_cache.get(rtoken, None):
@@ -105,7 +137,9 @@ class OAuthManager:
             request.session["refresh_token"] = payload.refresh_token
 
     async def route_login(self, request):
+        red = request.session.get("redirect_after_login", "/")
         request.session.clear()
+        request.session["redirect_after_login"] = red
         auth_route = request.query_params.get("redirect", "auth")
         redirect_uri = request.url_for(auth_route)
         params = {}
@@ -129,9 +163,7 @@ class OAuthManager:
         if not (rt := request.session.get("refresh_token")):
             if not state:
                 login_url = request.url_for("login")
-                return RedirectResponse(
-                    url=f"{login_url}?offline_token=true&redirect=token"
-                )
+                return RedirectResponse(url=f"{login_url}?offline_token=true&redirect=token")
             else:
                 return PlainTextResponse("Unauthorized", status_code=401)
 
@@ -140,9 +172,6 @@ class OAuthManager:
     async def route_logout(self, request):
         request.session.clear()
         return RedirectResponse(url="/")
-
-    # def redirect(self, request):
-    #     return 
 
     def install(self, app):
         if not self.enable:

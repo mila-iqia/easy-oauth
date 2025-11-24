@@ -13,21 +13,23 @@ Run with: python tests/oauth_mock.py
 Test with: curl -X POST http://localhost:8080/oauth2/token -d "grant_type=authorization_code&code=test"
 """
 
+import base64
 import json
 import time
 from datetime import datetime, timedelta
 from typing import Optional
-import base64
+from uuid import uuid4
 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import JSONResponse
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.backends import default_backend
-
 
 PORT = 29313
 
+# Configurable email for mock responses
+_mock_email = "test@example.com"
 
 app = FastAPI(title="Mock Google OAuth2 Server", version="1.0.0")
 
@@ -56,9 +58,11 @@ _exponent = (
 
 
 def create_mock_id_token(
-    email: str = "test@example.com", sub: str = "123456789", nonce: Optional[str] = None
+    email: Optional[str] = None, sub: str = "123456789", nonce: Optional[str] = None
 ) -> str:
     """Create a JWT ID token with a real RS256 signature."""
+    if email is None:
+        email = _mock_email
     header = {"alg": "RS256", "typ": "JWT", "kid": "mock_key_id"}
     payload = {
         "iss": f"http://localhost:{PORT}",
@@ -148,8 +152,8 @@ async def token_endpoint(
 
     if grant_type == "authorization_code":
         # Initial token request with authorization code
-        access_token = f"mock_access_token_{int(time.time())}"
-        new_refresh_token = f"mock_refresh_token_{int(time.time())}"
+        access_token = f"AT{uuid4()}"
+        new_refresh_token = f"RT{uuid4()}"
 
         # Retrieve nonce and redirect_uri from auth code store if it exists
         auth_code_data = mock_auth_code_store.get(code, {})
@@ -170,7 +174,7 @@ async def token_endpoint(
 
         # Store token data for potential refresh
         mock_token_store[new_refresh_token] = {
-            "email": "test@example.com",
+            "email": _mock_email,
             "sub": "123456789",
             "access_token": access_token,
             "created_at": datetime.now(),
@@ -198,12 +202,12 @@ async def token_endpoint(
 
         # Get stored user data or use defaults
         stored_data = mock_token_store.get(
-            refresh_token, {"email": "test@example.com", "sub": "123456789"}
+            refresh_token, {"email": _mock_email, "sub": "123456789"}
         )
 
         new_access_token = f"mock_access_token_refreshed_{int(time.time())}"
         new_id_token = create_mock_id_token(
-            email=stored_data.get("email", "test@example.com"),
+            email=stored_data.get("email", _mock_email),
             sub=stored_data.get("sub", "123456789"),
         )
 
@@ -235,7 +239,7 @@ async def userinfo_endpoint():
     return JSONResponse(
         {
             "sub": "123456789",
-            "email": "test@example.com",
+            "email": _mock_email,
             "email_verified": True,
             "name": "Test User",
             "given_name": "Test",
@@ -308,6 +312,20 @@ async def health_check():
     return {"status": "ok", "message": "Mock OAuth2 server is running"}
 
 
+@app.post("/set_email")
+async def set_email(email: str = Form(...)):
+    """Set the email address to be used in mock OAuth2 responses."""
+    global _mock_email
+    _mock_email = email
+    return JSONResponse(
+        {
+            "status": "ok",
+            "message": f"Email set to {email}",
+            "email": _mock_email,
+        }
+    )
+
+
 @app.get("/")
 async def root():
     """Root endpoint with server info."""
@@ -325,5 +343,6 @@ async def root():
             "get_token": f"curl -X POST http://localhost:{PORT}/oauth2/token -d 'grant_type=authorization_code&code=test'",
             "refresh_token": f"curl -X POST http://localhost:{PORT}/oauth2/token -d 'grant_type=refresh_token&refresh_token=YOUR_REFRESH_TOKEN'",
             "get_userinfo": f"curl http://localhost:{PORT}/oauth2/userinfo",
+            "set_email": f"curl -X POST http://localhost:{PORT}/set_email -d 'email=custom@example.com'",
         },
     }
