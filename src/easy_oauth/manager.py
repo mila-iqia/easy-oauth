@@ -8,6 +8,7 @@ from pathlib import Path
 
 import httpx
 from authlib.integrations.starlette_client import OAuth
+from itsdangerous import URLSafeSerializer
 from serieux import deserialize, serialize
 from serieux.features.encrypt import Secret
 from serieux.features.registered import Registry
@@ -42,6 +43,7 @@ class OAuthManager:
 
     def __post_init__(self):
         self.server_metadata = deserialize(OpenIDConfiguration, self.server_metadata_url)
+        self.secrets_serializer = URLSafeSerializer(self.secret_key)
 
     def register_capability(self, cap: Capability):
         self.available_capabilities[cap.name] = cap
@@ -60,6 +62,7 @@ class OAuthManager:
         if auth := request.headers.get("Authorization"):
             match auth.split("Bearer "):
                 case ("", rtoken):
+                    rtoken = self.secrets_serializer.loads(rtoken)
                     if user := await self.user_from_refresh_token(rtoken):
                         user = serialize(UserInfo, user)
                         request.session["user"] = user
@@ -167,7 +170,8 @@ class OAuthManager:
             else:
                 return PlainTextResponse("Unauthorized", status_code=401)
 
-        return JSONResponse({"refresh_token": rt})
+        ert = self.secrets_serializer.dumps(rt)
+        return JSONResponse({"refresh_token": ert})
 
     async def route_logout(self, request):
         request.session.clear()
