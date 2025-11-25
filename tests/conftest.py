@@ -1,9 +1,10 @@
 """Pytest configuration and fixtures."""
 
-import random
 import threading
 import time
 from dataclasses import dataclass
+from itertools import count
+from random import randint
 
 import httpx
 import pytest
@@ -12,6 +13,8 @@ import uvicorn
 from .app import make_app
 from .oauth_mock import PORT as OAUTH_PORT
 from .oauth_mock import app as oauth_app
+
+_port = count(OAUTH_PORT + randint(1, 1000))
 
 
 class ServerThread(threading.Thread):
@@ -139,7 +142,7 @@ class TokenInteractor:
 
 @pytest.fixture(scope="session")
 def app():
-    port = random.randint(30000, 39999)
+    port = next(_port)
     yield from create_endpoint(make_app(), "127.0.0.1", port)
 
 
@@ -154,7 +157,7 @@ def user(app, set_email):
 
 @pytest.fixture
 def app_write(tmpdir):
-    port = random.randint(30000, 39999)
+    port = next(_port)
     yield from create_endpoint(make_app(tmpdir), "127.0.0.1", port)
 
 
