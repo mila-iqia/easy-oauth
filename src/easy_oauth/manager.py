@@ -11,6 +11,7 @@ from authlib.integrations.starlette_client import OAuth
 from itsdangerous import URLSafeSerializer
 from serieux import deserialize, serialize
 from serieux.features.encrypt import Secret
+from serieux.features.filebacked import DefaultFactory, FileBacked
 from serieux.features.registered import Registry
 from starlette.exceptions import HTTPException
 from starlette.middleware.sessions import SessionMiddleware
@@ -49,14 +50,18 @@ class OAuthManager:
         self.available_capabilities[cap.name] = cap
 
     @cached_property
-    def capability_dict(self):
+    def capability_db(self):
         return deserialize(
-            dict[str, set[Capability @ Registry(self.available_capabilities)]],
+            FileBacked[
+                dict[str, set[Capability @ Registry(self.available_capabilities)]]
+                @ DefaultFactory(dict)
+            ],
             self.capability_file,
         )
 
     def has_capability(self, email, cap):
-        return cap in Capability(implies=self.capability_dict.get(email, set()))
+        cd = self.capability_db.value
+        return cap in Capability(implies=cd.get(email, set()))
 
     async def get_user(self, request: Request):
         if auth := request.headers.get("Authorization"):
