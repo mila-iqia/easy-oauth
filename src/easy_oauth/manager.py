@@ -21,7 +21,6 @@ from .structs import OpenIDConfiguration, Payload, UserInfo
 
 @dataclass(kw_only=True)
 class OAuthManager:
-    name: str
     server_metadata_url: str
     client_kwargs: dict[str, str]
     secret_key: Secret[str] = field(default_factory=lambda: secrets.token_urlsafe(32))
@@ -31,10 +30,10 @@ class OAuthManager:
     capability_file: Path = None
     capset: CapabilitySet = field(default_factory=lambda: CapabilitySet({}))
 
-    # [ignore]
+    # [serieux: ignore]
     server_metadata: OpenIDConfiguration = None
 
-    # [ignore]
+    # [serieux: ignore]
     token_cache: dict = field(default_factory=dict)
 
     def __post_init__(self):
@@ -265,13 +264,13 @@ class OAuthManager:
 
         oauth = OAuth()
         oauth.register(
-            name=self.name,
+            name="ezo",
             client_id=self.client_id,
             client_secret=self.client_secret,
             server_metadata_url=self.server_metadata_url,
             client_kwargs=self.client_kwargs,
         )
-        self.oauth = getattr(oauth, self.name)
+        self.oauth = getattr(oauth, "ezo")
 
         app.add_route("/login", self.route_login, name="login")
         app.add_route("/logout", self.route_logout)
