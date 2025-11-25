@@ -103,29 +103,65 @@ class TokenInteractor:
     email: str
     token: str
 
-    def get(self, endpoint, expect=200, **data):
+    @classmethod
+    def make(cls, app, email):
+        response = httpx.get(f"{app}/token", follow_redirects=True)
+        assert response.status_code == 200
+        token = response.json()["refresh_token"]
+        return cls(app, email, token)
+
+    def get(self, endpoint, expect=None, **data):
         response = httpx.get(
             f"{self.root}{endpoint}",
             headers={"Authorization": f"Bearer {self.token}"},
             params=data,
         )
-        assert response.status_code == expect
+        expect = 200 if expect is None else expect
+        if response.status_code != expect:
+            raise AssertionError(
+                f"Expected status {expect}, got {response.status_code}: {response.text}"
+            )
         return response
 
-
-@pytest.fixture
-def user(app, set_email):
-    def make_interactor(email):
-        set_email(email)
-        response = httpx.get(f"{app}/token", follow_redirects=True)
-        assert response.status_code == 200
-        token = response.json()["refresh_token"]
-        return TokenInteractor(app, email, token)
-
-    yield make_interactor
+    def post(self, endpoint, expect=None, **data):
+        response = httpx.post(
+            f"{self.root}{endpoint}",
+            headers={"Authorization": f"Bearer {self.token}"},
+            json=data,
+        )
+        expect = 200 if expect is None else expect
+        if response.status_code != expect:
+            raise AssertionError(
+                f"Expected status {expect}, got {response.status_code}: {response.text}"
+            )
+        return response
 
 
 @pytest.fixture(scope="session")
 def app():
     port = random.randint(30000, 39999)
     yield from create_endpoint(make_app(), "127.0.0.1", port)
+
+
+@pytest.fixture
+def user(app, set_email):
+    def make_interactor(email):
+        set_email(email)
+        return TokenInteractor.make(app, email)
+
+    yield make_interactor
+
+
+@pytest.fixture
+def app_write(tmpdir):
+    port = random.randint(30000, 39999)
+    yield from create_endpoint(make_app(tmpdir), "127.0.0.1", port)
+
+
+@pytest.fixture
+def user_write(app_write, set_email):
+    def make_interactor(email):
+        set_email(email)
+        return TokenInteractor.make(app_write, email)
+
+    yield make_interactor

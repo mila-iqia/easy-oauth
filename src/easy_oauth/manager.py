@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -34,7 +32,7 @@ class OAuthManager:
     capability_file: Path = None
 
     # [ignore]
-    available_capabilities: dict[str, Capability] = field(default_factory=dict)
+    cap_registry: Registry = field(default_factory=Registry)
 
     # [ignore]
     server_metadata: OpenIDConfiguration = None
@@ -47,21 +45,26 @@ class OAuthManager:
         self.secrets_serializer = URLSafeSerializer(self.secret_key)
 
     def register_capability(self, cap: Capability):
-        self.available_capabilities[cap.name] = cap
+        self.cap_registry.register(cap.name, cap)
 
     @cached_property
     def capability_db(self):
         return deserialize(
-            FileBacked[
-                dict[str, set[Capability @ Registry(self.available_capabilities)]]
-                @ DefaultFactory(dict)
-            ],
+            FileBacked[dict[str, set[Capability @ self.cap_registry]] @ DefaultFactory(dict)],
             self.capability_file,
         )
 
     def has_capability(self, email, cap):
         cd = self.capability_db.value
         return cap in Capability(implies=cd.get(email, set()))
+
+    def ensure_user_manager(self, email):
+        if self.user_management_capability is None or not self.has_capability(
+            email, self.user_management_capability
+        ):
+            raise HTTPException(
+                status_code=403, detail=f"{self.user_management_capability} capability is required"
+            )
 
     async def get_user(self, request: Request):
         if auth := request.headers.get("Authorization"):
@@ -99,13 +102,12 @@ class OAuthManager:
                 email = await self.ensure_email(request)
             else:
                 email = await self.get_email(request)
-            if email is not None:
-                if cap is None or self.has_capability(email, cap):
-                    yield email
-                else:
-                    raise HTTPException(status_code=403, detail=f"{cap} capability required")
-            else:
+            if email is None:
                 raise HTTPException(status_code=401, detail="Authentication required")
+            elif cap is None or self.has_capability(email, cap):
+                yield email
+            else:
+                raise HTTPException(status_code=403, detail=f"{cap} capability required")
 
         return get
 
@@ -182,8 +184,79 @@ class OAuthManager:
         request.session.clear()
         return RedirectResponse(url="/")
 
-    def install(self, app):
-        if not self.enable:
+    def _manage_cap_response(self, email):
+        db = self.capability_db
+        return JSONResponse(
+            {
+                "status": "ok",
+                "email": email,
+                "capabilities": serialize(
+                    set[Capability @ self.cap_registry], db.value.get(email, set())
+                ),
+            }
+        )
+
+    async def _manage_generic(self, request, reqcls):
+        user = await self.get_email(request)
+        self.ensure_user_manager(user)
+
+        req = deserialize(reqcls, await request.json())
+
+        db = self.capability_db
+        req.apply(db.value)
+        db.save()
+
+        return self._manage_cap_response(req.email)
+
+    async def route_manage_capabilities_add(self, request):
+        @dataclass
+        class AddRequest:
+            email: str
+            capability: Capability @ self.cap_registry
+
+            def apply(self, caps):
+                caps.setdefault(self.email, set()).add(self.capability)
+
+        return await self._manage_generic(request, AddRequest)
+
+    async def route_manage_capabilities_remove(self, request):
+        @dataclass
+        class RemoveRequest:
+            email: str
+            capability: Capability @ self.cap_registry
+
+            def apply(self, caps):
+                caps.setdefault(self.email, set()).discard(self.capability)
+
+        return await self._manage_generic(request, RemoveRequest)
+
+    async def route_manage_capabilities_set(self, request):
+        @dataclass
+        class SetRequest:
+            email: str
+            capabilities: set[Capability @ self.cap_registry]
+
+            def apply(self, caps):
+                caps[self.email] = self.capabilities
+
+        return await self._manage_generic(request, SetRequest)
+
+    async def route_manage_capabilities_list(self, request):
+        user = await self.get_email(request)
+
+        @dataclass
+        class ListRequest:
+            email: str = user
+
+        req = deserialize(ListRequest, dict(request.query_params))
+
+        if req.email != user:
+            self.ensure_user_manager(user)
+
+        return self._manage_cap_response(req.email)
+
+    def install(self, app, user_management_capability=None):
+        if not self.enable:  # pragma: no cover
             return
 
         app.add_middleware(
@@ -206,3 +279,22 @@ class OAuthManager:
         app.add_route("/logout", self.route_logout)
         app.add_route("/auth", self.route_auth, name="auth")
         app.add_route("/token", self.route_token, name="token")
+
+        self.user_management_capability = user_management_capability
+        if user_management_capability:
+            self.register_capability(user_management_capability)
+            app.add_route(
+                "/manage_capabilities/add", self.route_manage_capabilities_add, methods=["POST"]
+            )
+            app.add_route(
+                "/manage_capabilities/remove",
+                self.route_manage_capabilities_remove,
+                methods=["POST"],
+            )
+            app.add_route(
+                "/manage_capabilities/set",
+                self.route_manage_capabilities_set,
+                methods=["POST"],
+            )
+
+        app.add_route("/manage_capabilities/list", self.route_manage_capabilities_list)

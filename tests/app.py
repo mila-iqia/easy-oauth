@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 from fastapi import Depends, FastAPI
@@ -11,10 +12,17 @@ from easy_oauth.manager import OAuthManager
 here = Path(__file__).parent
 
 
-def make_app():
+def make_app(tmpdir: Path = None):
     app = FastAPI()
     oauth = deserialize(OAuthManager, Path(here / "appconfig.yaml"))
-    oauth.install(app)
+    if tmpdir is not None:
+        dest_cap_file = Path(tmpdir) / oauth.capability_file.name
+        shutil.copy(oauth.capability_file, dest_cap_file)
+        oauth.capability_file = dest_cap_file
+
+    user_management = Capability("user_management")
+
+    oauth.install(app, user_management_capability=user_management)
 
     reg = oauth.register_capability
 
@@ -23,7 +31,7 @@ def make_app():
     reg(police := Capability("police", [villager]))
     reg(mayor := Capability("mayor", [villager, police]))
     reg(baker := Capability("baker", [villager]))
-    reg(admin := Capability("admin", [villager, mafia, baker, mayor]))
+    reg(admin := Capability("admin", [villager, mafia, baker, mayor, user_management]))
 
     @app.get("/")
     async def route_root():
@@ -48,6 +56,14 @@ def make_app():
         email: str = Depends(oauth.get_email_capability(mafia)),
     ):
         return PlainTextResponse(f"{target} was murdered by {email}")
+
+    @app.get("/bake")
+    async def route_bake(
+        request: Request,
+        food: str,
+        email: str = Depends(oauth.get_email_capability(baker, redirect=True)),
+    ):
+        return PlainTextResponse(f"{food} was baked by {email}")
 
     @app.get("/god")
     async def route_god(
