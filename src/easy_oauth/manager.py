@@ -39,12 +39,17 @@ class OAuthManager:
             "user_management", None
         )
 
+    ###########
+    # Helpers #
+    ###########
+
     def ensure_user_manager(self, email):
         if self.user_management_capability is None or not self.capabilities.check(
             email, self.user_management_capability
         ):
             raise HTTPException(
-                status_code=403, detail=f"{self.user_management_capability} capability is required"
+                status_code=403,
+                detail=f"{self.user_management_capability} capability is required",
             )
 
     async def get_user(self, request: Request):
@@ -263,13 +268,13 @@ class OAuthManager:
 
         oauth = OAuth()
         oauth.register(
-            name="ezo",
+            name="easy-oauth",
             client_id=self.client_id,
             client_secret=self.client_secret,
             server_metadata_url=self.server_metadata_url,
             client_kwargs=self.client_kwargs,
         )
-        self.oauth = getattr(oauth, "ezo")
+        self.oauth = getattr(oauth, "easy-oauth")
 
         app.add_route("/login", self.route_login, name="login")
         app.add_route("/logout", self.route_logout)
@@ -278,7 +283,9 @@ class OAuthManager:
 
         if self.user_management_capability:
             app.add_route(
-                "/manage_capabilities/add", self.route_manage_capabilities_add, methods=["POST"]
+                "/manage_capabilities/add",
+                self.route_manage_capabilities_add,
+                methods=["POST"],
             )
             app.add_route(
                 "/manage_capabilities/remove",
