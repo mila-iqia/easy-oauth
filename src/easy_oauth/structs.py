@@ -5,8 +5,6 @@ from dataclasses import dataclass, field
 import httpx
 from serieux import deserialize
 
-from .cap import Capability
-
 
 class Base:
     class SerieuxConfig:
@@ -45,9 +43,6 @@ class UserInfo(Base):
 
     # The user's unique ID
     sub: str
-
-    # User capability
-    caps: set[Capability] = field(default_factory=set)
 
     @classmethod
     def serieux_from_string(cls, idtoken):
