@@ -24,6 +24,8 @@ build-backend = "uv_build"
 dev = [
     "fastapi>=0.121.3",
     "pytest>=9.0.1",
+    "pytest-cov>=7.0.0",
+    "pytest-freezer>=0.4.9",
     "python-multipart>=0.0.20",
     "uvicorn>=0.38.0",
 ]
