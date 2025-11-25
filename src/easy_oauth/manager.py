@@ -10,13 +10,12 @@ from itsdangerous import URLSafeSerializer
 from serieux import deserialize, serialize
 from serieux.features.encrypt import Secret
 from serieux.features.filebacked import DefaultFactory, FileBacked
-from serieux.features.registered import Registry
 from starlette.exceptions import HTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse
 
-from .cap import Capability
+from .cap import Capability, CapabilitySet
 from .structs import OpenIDConfiguration, Payload, UserInfo
 
 
@@ -30,9 +29,7 @@ class OAuthManager:
     client_secret: Secret[str] = None
     enable: bool = True
     capability_file: Path = None
-
-    # [ignore]
-    cap_registry: Registry = field(default_factory=Registry)
+    capset: CapabilitySet = field(default_factory=lambda: CapabilitySet({}))
 
     # [ignore]
     server_metadata: OpenIDConfiguration = None
@@ -43,14 +40,14 @@ class OAuthManager:
     def __post_init__(self):
         self.server_metadata = deserialize(OpenIDConfiguration, self.server_metadata_url)
         self.secrets_serializer = URLSafeSerializer(self.secret_key)
-
-    def register_capability(self, cap: Capability):
-        self.cap_registry.register(cap.name, cap)
+        self.user_management_capability = self.capset.registry.registry.get(
+            "user_management", None
+        )
 
     @cached_property
     def capability_db(self):
         return deserialize(
-            FileBacked[dict[str, set[Capability @ self.cap_registry]] @ DefaultFactory(dict)],
+            FileBacked[dict[str, set[self.capset.captype]] @ DefaultFactory(dict)],
             self.capability_file,
         )
 
@@ -97,6 +94,9 @@ class OAuthManager:
             return user["email"]
 
     def get_email_capability(self, cap=None, redirect=False):
+        if isinstance(cap, str):
+            cap = deserialize(self.capset.captype, cap)
+
         async def get(request: Request):
             if redirect:
                 email = await self.ensure_email(request)
@@ -190,9 +190,7 @@ class OAuthManager:
             {
                 "status": "ok",
                 "email": email,
-                "capabilities": serialize(
-                    set[Capability @ self.cap_registry], db.value.get(email, set())
-                ),
+                "capabilities": serialize(set[self.capset.captype], db.value.get(email, set())),
             }
         )
 
@@ -212,7 +210,7 @@ class OAuthManager:
         @dataclass
         class AddRequest:
             email: str
-            capability: Capability @ self.cap_registry
+            capability: self.capset.captype
 
             def apply(self, caps):
                 caps.setdefault(self.email, set()).add(self.capability)
@@ -223,7 +221,7 @@ class OAuthManager:
         @dataclass
         class RemoveRequest:
             email: str
-            capability: Capability @ self.cap_registry
+            capability: self.capset.captype
 
             def apply(self, caps):
                 caps.setdefault(self.email, set()).discard(self.capability)
@@ -234,7 +232,7 @@ class OAuthManager:
         @dataclass
         class SetRequest:
             email: str
-            capabilities: set[Capability @ self.cap_registry]
+            capabilities: set[self.capset.captype]
 
             def apply(self, caps):
                 caps[self.email] = self.capabilities
@@ -255,7 +253,7 @@ class OAuthManager:
 
         return self._manage_cap_response(req.email)
 
-    def install(self, app, user_management_capability=None):
+    def install(self, app):
         if not self.enable:  # pragma: no cover
             return
 
@@ -280,9 +278,7 @@ class OAuthManager:
         app.add_route("/auth", self.route_auth, name="auth")
         app.add_route("/token", self.route_token, name="token")
 
-        self.user_management_capability = user_management_capability
-        if user_management_capability:
-            self.register_capability(user_management_capability)
+        if self.user_management_capability:
             app.add_route(
                 "/manage_capabilities/add", self.route_manage_capabilities_add, methods=["POST"]
             )

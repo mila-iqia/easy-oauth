@@ -3,10 +3,9 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse, PlainTextResponse
-from serieux import deserialize
+from serieux import Sources, deserialize
 from starlette.requests import Request
 
-from easy_oauth.cap import Capability
 from easy_oauth.manager import OAuthManager
 
 here = Path(__file__).parent
@@ -14,24 +13,31 @@ here = Path(__file__).parent
 
 def make_app(tmpdir: Path = None):
     app = FastAPI()
-    oauth = deserialize(OAuthManager, Path(here / "appconfig.yaml"))
+
+    capgraph = {
+        "user_management": [],
+        "villager": [],
+        "mafia": ["villager"],
+        "police": ["villager"],
+        "mayor": ["villager", "police"],
+        "baker": ["villager"],
+    }
+
+    oauth = deserialize(
+        OAuthManager,
+        Sources(
+            Path(here / "appconfig.yaml"),
+            {
+                "capset": {"capabilities": capgraph},
+            },
+        ),
+    )
     if tmpdir is not None:
         dest_cap_file = Path(tmpdir) / oauth.capability_file.name
         shutil.copy(oauth.capability_file, dest_cap_file)
         oauth.capability_file = dest_cap_file
 
-    user_management = Capability("user_management")
-
-    oauth.install(app, user_management_capability=user_management)
-
-    reg = oauth.register_capability
-
-    reg(villager := Capability("villager"))
-    reg(mafia := Capability("mafia", [villager]))
-    reg(police := Capability("police", [villager]))
-    reg(mayor := Capability("mayor", [villager, police]))
-    reg(baker := Capability("baker", [villager]))
-    reg(admin := Capability("admin", [villager, mafia, baker, mayor, user_management]))
+    oauth.install(app)
 
     @app.get("/")
     async def route_root():
@@ -53,7 +59,7 @@ def make_app(tmpdir: Path = None):
     async def route_murder(
         request: Request,
         target: str,
-        email: str = Depends(oauth.get_email_capability(mafia)),
+        email: str = Depends(oauth.get_email_capability("mafia")),
     ):
         return PlainTextResponse(f"{target} was murdered by {email}")
 
@@ -61,14 +67,14 @@ def make_app(tmpdir: Path = None):
     async def route_bake(
         request: Request,
         food: str,
-        email: str = Depends(oauth.get_email_capability(baker, redirect=True)),
+        email: str = Depends(oauth.get_email_capability("baker", redirect=True)),
     ):
         return PlainTextResponse(f"{food} was baked by {email}")
 
     @app.get("/god")
     async def route_god(
         request: Request,
-        email: str = Depends(oauth.get_email_capability(admin)),
+        email: str = Depends(oauth.get_email_capability("admin")),
     ):
         return PlainTextResponse(f"{email} is god")
 
