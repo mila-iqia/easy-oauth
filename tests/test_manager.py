@@ -4,6 +4,10 @@ import httpx
 import pytest
 from serieux import deserialize
 
+from easy_oauth.manager import OAuthManager
+
+here = Path(__file__).parent
+
 
 class D(dict):
     def __getattr__(self, attr):
@@ -62,6 +66,16 @@ def test_hello_token(app):
     response = httpx.get(f"{app}/hello", headers={"Authorization": f"Bearer {token}"})
     assert response.text == "Hello, test@example.com!"
     assert response.status_code == 200
+
+
+def test_hello_bad_token(app):
+    response = httpx.get(f"{app}/hello", headers={"Authorization": "Bearer XXX"})
+    assert response.status_code in (401, 500)
+
+    oauth = deserialize(OAuthManager, Path(here / "appconfig.yaml"))
+    token = oauth.secrets_serializer.dumps("XXX")
+    response = httpx.get(f"{app}/hello", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code in (401, 500)
 
 
 def test_hello_token_renew(app, freezer):

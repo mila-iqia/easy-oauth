@@ -1,6 +1,6 @@
 [project]
 name = "easy-oauth"
-version = "0.1.0"
+version = "0.0.1"
 description = "Add your description here"
 readme = "README.md"
 authors = [
@@ -12,7 +12,7 @@ dependencies = [
     "httpx>=0.28.1",
     "itsdangerous>=2.2.0",
     "pyyaml>=6.0.3",
-    "serieux>=0.3.4",
+    "serieux>=0.3.5",
     "starlette>=0.50.0",
 ]
 

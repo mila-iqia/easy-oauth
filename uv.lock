@@ -201,7 +201,7 @@ wheels = [
 
 [[package]]
 name = "easy-oauth"
-version = "0.1.0"
+version = "0.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "authlib" },
@@ -228,7 +228,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "serieux", specifier = ">=0.3.4" },
+    { name = "serieux", specifier = ">=0.3.5" },
     { name = "starlette", specifier = ">=0.50.0" },
 ]
 
@@ -244,7 +244,7 @@ dev = [
 
 [[package]]
 name = "fastapi"
-version = "0.121.3"
+version = "0.122.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
@@ -252,9 +252,9 @@ dependencies = [
     { name = "starlette" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/80/f0/086c442c6516195786131b8ca70488c6ef11d2f2e33c9a893576b2b0d3f7/fastapi-0.121.3.tar.gz", hash = "sha256:0055bc24fe53e56a40e9e0ad1ae2baa81622c406e548e501e717634e2dfbc40b", size = 344501, upload-time = "2025-11-19T16:53:39.243Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b2/de/3ee97a4f6ffef1fb70bf20561e4f88531633bb5045dc6cebc0f8471f764d/fastapi-0.122.0.tar.gz", hash = "sha256:cd9b5352031f93773228af8b4c443eedc2ac2aa74b27780387b853c3726fb94b", size = 346436, upload-time = "2025-11-24T19:17:47.95Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/98/b6/4f620d7720fc0a754c8c1b7501d73777f6ba43b57c8ab99671f4d7441eb8/fastapi-0.121.3-py3-none-any.whl", hash = "sha256:0c78fc87587fcd910ca1bbf5bc8ba37b80e119b388a7206b39f0ecc95ebf53e9", size = 109801, upload-time = "2025-11-19T16:53:37.918Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/93/aa8072af4ff37b795f6bbf43dcaf61115f40f49935c7dbb180c9afc3f421/fastapi-0.122.0-py3-none-any.whl", hash = "sha256:a456e8915dfc6c8914a50d9651133bd47ec96d331c5b44600baa635538a30d67", size = 110671, upload-time = "2025-11-24T19:17:45.96Z" },
 ]
 
 [[package]]
@@ -524,14 +524,14 @@ wheels = [
 
 [[package]]
 name = "serieux"
-version = "0.3.4"
+version = "0.3.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ovld" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/88/37/6d129e9ac9393648fd935bca4cb4b62e8bb5ff16ab5db6d3e64309111d2e/serieux-0.3.4.tar.gz", hash = "sha256:7e3a9fd48f32f19306e1c1221a36a87fafa20afe9e7ae1c0b4d7bac05dde2862", size = 167626, upload-time = "2025-11-14T00:03:45.037Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/78/12/2e1a4909fe31fbf612a442be559aee98c9eab90c04e9dbe4b508c4a31010/serieux-0.3.5.tar.gz", hash = "sha256:42ae6c437e4f85fb00bb56332c7d64bd25c14dfa7366981caed9a87ac0ca58c8", size = 169823, upload-time = "2025-11-25T20:46:53.77Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a7/9b/ac67a0a9a26a93efa2ec6550d92e2dd64fb001e030430213691916bf7e06/serieux-0.3.4-py3-none-any.whl", hash = "sha256:414aa125d02c3f187829f7763386bce784651801cf61a138e426306a455e3f13", size = 51830, upload-time = "2025-11-14T00:03:43.744Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/b8/762d4f877eff7b6cb55c7ba1f805dd8af2a53857b8008d996101a2dd9237/serieux-0.3.5-py3-none-any.whl", hash = "sha256:5891f49ca59667055cc741d0707423127c8a702e2cc3783713abb943df37c381", size = 53469, upload-time = "2025-11-25T20:46:52.353Z" },
 ]
 
 [[package]]

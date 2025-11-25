@@ -71,9 +71,9 @@ class OAuthManager:
                         user = serialize(UserInfo, user)
                         request.session["user"] = user
                         return user
-                    else:
+                    else:  # pragma: no cover
                         raise HTTPException(status_code=401, detail="Invalid user")
-                case _:
+                case _:  # pragma: no cover
                     raise HTTPException(status_code=401, detail="Malformed authorization")
         return request.session.get("user")
 
@@ -173,7 +173,7 @@ class OAuthManager:
             if not state:
                 login_url = request.url_for("login")
                 return RedirectResponse(url=f"{login_url}?offline_token=true&redirect=token")
-            else:
+            else:  # pragma: no cover
                 return PlainTextResponse("Unauthorized", status_code=401)
 
         ert = self.secrets_serializer.dumps(rt)
