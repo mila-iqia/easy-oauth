@@ -113,12 +113,7 @@ class TokenInteractor:
         token = response.json()["refresh_token"]
         return cls(app, email, token)
 
-    def get(self, endpoint, expect=None, **data):
-        response = httpx.get(
-            f"{self.root}{endpoint}",
-            headers={"Authorization": f"Bearer {self.token}"},
-            params=data,
-        )
+    def expect(self, response, expect=None):
         expect = 200 if expect is None else expect
         if response.status_code != expect:
             raise AssertionError(
@@ -126,18 +121,21 @@ class TokenInteractor:
             )
         return response
 
+    def get(self, endpoint, expect=None, **data):
+        response = httpx.get(
+            f"{self.root}{endpoint}",
+            headers={"Authorization": f"Bearer {self.token}"},
+            params=data,
+        )
+        return self.expect(response, expect)
+
     def post(self, endpoint, expect=None, **data):
         response = httpx.post(
             f"{self.root}{endpoint}",
             headers={"Authorization": f"Bearer {self.token}"},
             json=data,
         )
-        expect = 200 if expect is None else expect
-        if response.status_code != expect:
-            raise AssertionError(
-                f"Expected status {expect}, got {response.status_code}: {response.text}"
-            )
-        return response
+        return self.expect(response, expect)
 
 
 @pytest.fixture(scope="session")
