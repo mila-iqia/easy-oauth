@@ -6,6 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Olivier Breuleux", email = "breuleux@gmail.com" }
 ]
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "authlib>=1.6.5",
