@@ -1,21 +1,18 @@
 import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from functools import cached_property
-from pathlib import Path
 
 import httpx
 from authlib.integrations.starlette_client import OAuth
 from itsdangerous import URLSafeSerializer
 from serieux import deserialize, serialize
 from serieux.features.encrypt import Secret
-from serieux.features.filebacked import DefaultFactory, FileBacked
 from starlette.exceptions import HTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse
 
-from .cap import Capability, CapabilitySet
+from .cap import CapabilitySet
 from .structs import OpenIDConfiguration, Payload, UserInfo
 
 
@@ -27,8 +24,7 @@ class OAuthManager:
     client_id: Secret[str] = None
     client_secret: Secret[str] = None
     enable: bool = True
-    capability_file: Path = None
-    capset: CapabilitySet = field(default_factory=lambda: CapabilitySet({}))
+    capabilities: CapabilitySet = field(default_factory=lambda: CapabilitySet({}))
 
     # [serieux: ignore]
     server_metadata: OpenIDConfiguration = None
@@ -39,23 +35,12 @@ class OAuthManager:
     def __post_init__(self):
         self.server_metadata = deserialize(OpenIDConfiguration, self.server_metadata_url)
         self.secrets_serializer = URLSafeSerializer(self.secret_key)
-        self.user_management_capability = self.capset.registry.registry.get(
+        self.user_management_capability = self.capabilities.registry.registry.get(
             "user_management", None
         )
 
-    @cached_property
-    def capability_db(self):
-        return deserialize(
-            FileBacked[dict[str, set[self.capset.captype]] @ DefaultFactory(dict)],
-            self.capability_file,
-        )
-
-    def has_capability(self, email, cap):
-        cd = self.capability_db.value
-        return cap in Capability(implies=cd.get(email, set()))
-
     def ensure_user_manager(self, email):
-        if self.user_management_capability is None or not self.has_capability(
+        if self.user_management_capability is None or not self.capabilities.check(
             email, self.user_management_capability
         ):
             raise HTTPException(
@@ -94,7 +79,7 @@ class OAuthManager:
 
     def get_email_capability(self, cap=None, redirect=False):
         if isinstance(cap, str):
-            cap = deserialize(self.capset.captype, cap)
+            cap = deserialize(self.capabilities.captype, cap)
 
         async def get(request: Request):
             if redirect:
@@ -103,7 +88,7 @@ class OAuthManager:
                 email = await self.get_email(request)
             if email is None:
                 raise HTTPException(status_code=401, detail="Authentication required")
-            elif cap is None or self.has_capability(email, cap):
+            elif cap is None or self.capabilities.check(email, cap):
                 yield email
             else:
                 raise HTTPException(status_code=403, detail=f"{cap} capability required")
@@ -145,6 +130,10 @@ class OAuthManager:
             request.session["access_token"] = payload.access_token
             request.session["refresh_token"] = payload.refresh_token
 
+    ##########
+    # Routes #
+    ##########
+
     async def route_login(self, request):
         red = request.session.get("redirect_after_login", "/")
         request.session.clear()
@@ -183,13 +172,19 @@ class OAuthManager:
         request.session.clear()
         return RedirectResponse(url="/")
 
+    ##########################
+    # User management routes #
+    ##########################
+
     def _manage_cap_response(self, email):
-        db = self.capability_db
+        db = self.capabilities.db
         return JSONResponse(
             {
                 "status": "ok",
                 "email": email,
-                "capabilities": serialize(set[self.capset.captype], db.value.get(email, set())),
+                "capabilities": serialize(
+                    set[self.capabilities.captype], db.value.get(email, set())
+                ),
             }
         )
 
@@ -199,7 +194,7 @@ class OAuthManager:
 
         req = deserialize(reqcls, await request.json())
 
-        db = self.capability_db
+        db = self.capabilities.db
         req.apply(db.value)
         db.save()
 
@@ -209,7 +204,7 @@ class OAuthManager:
         @dataclass
         class AddRequest:
             email: str
-            capability: self.capset.captype
+            capability: self.capabilities.captype
 
             def apply(self, caps):
                 caps.setdefault(self.email, set()).add(self.capability)
@@ -220,7 +215,7 @@ class OAuthManager:
         @dataclass
         class RemoveRequest:
             email: str
-            capability: self.capset.captype
+            capability: self.capabilities.captype
 
             def apply(self, caps):
                 caps.setdefault(self.email, set()).discard(self.capability)
@@ -231,7 +226,7 @@ class OAuthManager:
         @dataclass
         class SetRequest:
             email: str
-            capabilities: set[self.capset.captype]
+            capabilities: set[self.capabilities.captype]
 
             def apply(self, caps):
                 caps[self.email] = self.capabilities
@@ -251,6 +246,10 @@ class OAuthManager:
             self.ensure_user_manager(user)
 
         return self._manage_cap_response(req.email)
+
+    ##################
+    # Install to app #
+    ##################
 
     def install(self, app):
         if not self.enable:  # pragma: no cover

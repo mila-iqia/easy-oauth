@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse, PlainTextResponse
-from serieux import Sources, deserialize
+from serieux import deserialize
 from starlette.requests import Request
 
 from easy_oauth.manager import OAuthManager
@@ -14,28 +14,12 @@ here = Path(__file__).parent
 def make_app(tmpdir: Path = None):
     app = FastAPI()
 
-    capgraph = {
-        "user_management": [],
-        "villager": [],
-        "mafia": ["villager"],
-        "police": ["villager"],
-        "mayor": ["villager", "police"],
-        "baker": ["villager"],
-    }
+    oauth = deserialize(OAuthManager, Path(here / "appconfig.yaml"))
 
-    oauth = deserialize(
-        OAuthManager,
-        Sources(
-            Path(here / "appconfig.yaml"),
-            {
-                "capset": {"capabilities": capgraph},
-            },
-        ),
-    )
     if tmpdir is not None:
-        dest_cap_file = Path(tmpdir) / oauth.capability_file.name
-        shutil.copy(oauth.capability_file, dest_cap_file)
-        oauth.capability_file = dest_cap_file
+        dest_cap_file = Path(tmpdir) / oauth.capabilities.user_file.name
+        shutil.copy(oauth.capabilities.user_file, dest_cap_file)
+        oauth.capabilities.user_file = dest_cap_file
 
     oauth.install(app)
 

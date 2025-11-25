@@ -32,8 +32,8 @@ oauth = OAuthManager(
         "prompt": "select_account",
     }
     # Set of capabilities that can be assigned to users
-    capset=CapabilitySet(
-        capabilities={
+    capabilities=CapabilitySet(
+        graph={
             # Basic capability
             "read": [],
             # write, also implies read
@@ -48,9 +48,9 @@ oauth = OAuthManager(
         },
         # Create the "admin" capability that has every other capability
         auto_admin=True,
+        # File where each user's capability is stored
+        user_file="caps.yaml",
     ),
-    # File where each user's capability is stored
-    capability_file="caps.yaml",
 )
 
 app = FastAPI()
@@ -113,15 +113,15 @@ client_secret: "<CLIENT_SECRET>"
 client_kwargs:
   scope: openid email
   prompt: select_account
-capset:
-  capabilities:
+capabilities:
+  graph:
     read: []
     write: [read]
     moderate: [read, write]
     announce: [read, write]
     user_management: []
   auto_admin: true
-capability_file: caps.yaml
+  user_file: caps.yaml
 ```
 
 And instantiated like this:
