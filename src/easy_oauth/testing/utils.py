@@ -1,6 +1,8 @@
 import threading
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
+from random import randint
 
 import httpx
 import uvicorn
@@ -71,7 +73,6 @@ class OAuthMock:
         self.host = host
         self.port = port
         self.base_url = None
-        self._email = "test@example.com"
         self._endpoint_context = None
 
     def __enter__(self):
@@ -90,11 +91,65 @@ class OAuthMock:
         response.raise_for_status()
         return response.json()
 
-    @property
-    def email(self):
-        return self._email
 
-    @email.setter
-    def email(self, value):
-        self.set_email(value)
-        self._email = value
+class AppTester:
+    def __init__(self, app, oauth_mock: OAuthMock, host="127.0.0.1", port=None):
+        self.app = app
+        self.oauth_mock = oauth_mock
+        self.host = host
+        self.port = port or (30000 + randint(1, 9999))
+        self.base_url = None
+        self._endpoint_context = None
+
+    def __enter__(self):
+        self._endpoint_context = create_endpoint(self.app, self.host, self.port)
+        self.base_url = self._endpoint_context.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._endpoint_context:
+            self._endpoint_context.__exit__(exc_type, exc_val, exc_tb)
+
+    def set_email(self, email):
+        return self.oauth_mock.set_email(email)
+
+    def client(self, email):
+        self.set_email(email)
+        response = httpx.get(f"{self.base_url}/token", follow_redirects=True)
+        assert response.status_code == 200
+        token = response.json()["refresh_token"]
+        return TokenInteractor(self.base_url, email, token)
+
+    def __str__(self):
+        return self.base_url
+
+
+@dataclass
+class TokenInteractor:
+    root: str
+    email: str
+    token: str
+
+    def expect(self, response, expect=None):
+        expect = 200 if expect is None else expect
+        if response.status_code != expect:
+            raise AssertionError(
+                f"Expected status {expect}, got {response.status_code}: {response.text}"
+            )
+        return response
+
+    def get(self, endpoint, expect=None, **data):
+        response = httpx.get(
+            f"{self.root}{endpoint}",
+            headers={"Authorization": f"Bearer {self.token}"},
+            params=data,
+        )
+        return self.expect(response, expect)
+
+    def post(self, endpoint, expect=None, **data):
+        response = httpx.post(
+            f"{self.root}{endpoint}",
+            headers={"Authorization": f"Bearer {self.token}"},
+            json=data,
+        )
+        return self.expect(response, expect)

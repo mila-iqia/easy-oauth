@@ -29,8 +29,8 @@ def test_hello_nologin(app):
         assert response.status_code == 200
 
 
-def test_hello_login(app, set_email):
-    set_email("test@example.com")
+def test_hello_login(app):
+    app.set_email("test@example.com")
     with httpx.Client() as client:
         client.get(f"{app}/login", follow_redirects=True)
         response = client.get(f"{app}/hello")
@@ -38,8 +38,8 @@ def test_hello_login(app, set_email):
         assert response.status_code == 200
 
 
-def test_logout(app, set_email):
-    set_email("test@example.com")
+def test_logout(app):
+    app.set_email("test@example.com")
     with httpx.Client() as client:
         client.get(f"{app}/login", follow_redirects=True)
         assert client.get(f"{app}/hello").text == "Hello, test@example.com!"
@@ -47,24 +47,24 @@ def test_logout(app, set_email):
         assert client.get(f"{app}/hello").text == "Hello, None!"
 
 
-def test_hello_ensure(app, set_email):
-    set_email("test@example.com")
+def test_hello_ensure(app):
+    app.set_email("test@example.com")
     with httpx.Client() as client:
         response = client.get(f"{app}/hello_ensure", follow_redirects=True)
         assert response.text == "Hello, test@example.com!"
         assert response.status_code == 200
 
 
-def test_bake_ensure(app, set_email):
-    set_email("paul.baguette@corleone.com")
+def test_bake_ensure(app):
+    app.set_email("paul.baguette@corleone.com")
     with httpx.Client() as client:
         response = client.get(f"{app}/bake", params={"food": "potato"}, follow_redirects=True)
         assert response.text == "potato was baked by paul.baguette@corleone.com"
         assert response.status_code == 200
 
 
-def test_hello_token(app, set_email):
-    set_email("test@example.com")
+def test_hello_token(app):
+    app.set_email("test@example.com")
     response = httpx.get(f"{app}/token", follow_redirects=True)
     token = response.json()["refresh_token"]
     response = httpx.get(f"{app}/hello", headers={"Authorization": f"Bearer {token}"})
@@ -82,8 +82,8 @@ def test_hello_bad_token(app):
     assert response.status_code in (401, 500)
 
 
-def test_hello_token_renew(app, set_email, freezer):
-    set_email("test@example.com")
+def test_hello_token_renew(app, freezer):
+    app.set_email("test@example.com")
     response = httpx.get(f"{app}/token", follow_redirects=True)
     token = response.json()["refresh_token"]
     response = httpx.get(f"{app}/hello", headers={"Authorization": f"Bearer {token}"})
@@ -106,8 +106,8 @@ def queries(*queries):
     D(user="wiggum@springfield.us", status=403),
     D(user="admin@admin.admin"),
 )
-def test_capability_restriction(user, query):
-    u = user(query.user)
+def test_capability_restriction(app, query):
+    u = app.client(query.user)
     targ = "Little Jimmy"
     response = u.get("/murder", target=targ, expect=query.status)
     if query.status is None:
@@ -127,8 +127,8 @@ def test_no_capability(app):
     D(user="admin@admin.admin"),
     D(user="mega-admin@admin.admin"),
 )
-def test_capability_admin(user, query):
-    u = user(query.user)
+def test_capability_admin(app, query):
+    u = app.client(query.user)
     response = u.get("/god", expect=query.status)
     if query.status is None:
         assert response.text == f"{u.email} is god"
@@ -145,8 +145,8 @@ def test_capability_admin(user, query):
     D(user="boss@corleone.com", email="hubert.bonjour@courrier-chaud.fr", status=403),
     D(user="admin@admin.admin", email="hubert.bonjour@courrier-chaud.fr", caps={"villager"}),
 )
-def test_manage_list(user, query):
-    u = user(query.user)
+def test_manage_list(app, query):
+    u = app.client(query.user)
     email = query.email or query.user
     response = u.get("/manage_capabilities/list", email=email, expect=query.status)
     if query.status is None:
@@ -161,17 +161,17 @@ def test_manage_list(user, query):
     D(user="wiggum@springfield.us", status=403),
     D(user="admin@admin.admin", email="hubert.bonjour@courrier-chaud.fr"),
 )
-def test_cannot_manage_users(user_write, query):
-    u = user_write(query.user)
+def test_cannot_manage_users(app_write, query):
+    u = app_write.client(query.user)
     target = query.email or u.email
     u.post("/manage_capabilities/add", email=target, capability="baker", expect=query.status)
     u.post("/manage_capabilities/remove", email=target, capability="baker", expect=query.status)
     u.post("/manage_capabilities/set", email=target, capabilities=["baker"], expect=query.status)
 
 
-def test_add_capability(user_write, tmpdir):
-    u = user_write("wiggum@springfield.us")
-    admin = user_write("admin@admin.admin")
+def test_add_capability(app_write, tmpdir):
+    u = app_write.client("wiggum@springfield.us")
+    admin = app_write.client("admin@admin.admin")
 
     targ = "Homer"
     u.get("/murder", target=targ, expect=403)
@@ -185,9 +185,9 @@ def test_add_capability(user_write, tmpdir):
     assert new_caps[u.email] == {"police", "mafia"}
 
 
-def test_remove_capability(user_write, tmpdir):
-    u = user_write("boss@corleone.com")
-    admin = user_write("admin@admin.admin")
+def test_remove_capability(app_write, tmpdir):
+    u = app_write.client("boss@corleone.com")
+    admin = app_write.client("admin@admin.admin")
 
     targ = "Homer"
     response = u.get("/murder", target=targ)
@@ -200,13 +200,13 @@ def test_remove_capability(user_write, tmpdir):
     assert new_caps[u.email] == set()
 
 
-def test_admin_override_persists(user_write, tmpdir):
+def test_admin_override_persists(app_write, tmpdir):
     """
     Removing the 'admin' capability from mega-admin@admin.admin
     should not make them lose 'admin', since it is an override in appconfig.yaml.
     """
-    u = user_write("mega-admin@admin.admin")
-    admin = user_write("admin@admin.admin")
+    u = app_write.client("mega-admin@admin.admin")
+    admin = app_write.client("admin@admin.admin")
 
     # Sanity: mega-admin can perform admin-only action
     response = u.get("/god")
@@ -227,9 +227,9 @@ def test_admin_override_persists(user_write, tmpdir):
     assert "admin" not in caps_file.get(u.email, set())
 
 
-def test_set_capability(user_write, tmpdir):
-    u = user_write("boss@corleone.com")
-    admin = user_write("admin@admin.admin")
+def test_set_capability(app_write, tmpdir):
+    u = app_write.client("boss@corleone.com")
+    admin = app_write.client("admin@admin.admin")
 
     targ = "Homer"
     response = u.get("/murder", target=targ)
