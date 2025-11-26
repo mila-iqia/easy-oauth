@@ -55,7 +55,7 @@ def create_endpoint(app, host, port):
 
             with httpx.Client() as client:
                 response = client.get(f"{base_url}/health", timeout=1.0)
-                if response.status_code == 200:
+                if response.status_code in (200, 404):
                     break
         except (httpx.ConnectError, httpx.TimeoutException):
             time.sleep(retry_delay)

@@ -55,20 +55,13 @@ _exponent = (
 )
 
 
-def create_mock_id_token(
-    email: Optional[str] = None,
-    sub: str = "123456789",
-    nonce: Optional[str] = None,
-    base_url: str = "http://localhost:29313",
-) -> str:
+def create_mock_id_token(email: str, sub: str, nonce: str, base_url: str, client_id: str) -> str:
     """Create a JWT ID token with a real RS256 signature."""
-    if email is None:
-        email = _mock_email
     header = {"alg": "RS256", "typ": "JWT", "kid": "mock_key_id"}
     payload = {
         "iss": base_url,
-        "aud": "mock_client_id",
-        "azp": "mock_client_id",
+        "aud": client_id,
+        "azp": client_id,
         "sub": sub,
         "email": email,
         "email_verified": True,
@@ -174,7 +167,9 @@ async def token_endpoint(
             )
 
         base_url = f"{request.url.scheme}://{request.url.netloc}"
-        id_token = create_mock_id_token(nonce=nonce, base_url=base_url)
+        id_token = create_mock_id_token(
+            email=_mock_email, sub="123456789", nonce=nonce, base_url=base_url, client_id=client_id
+        )
 
         # Store token data for potential refresh
         mock_token_store[new_refresh_token] = {
@@ -214,7 +209,9 @@ async def token_endpoint(
         new_id_token = create_mock_id_token(
             email=stored_data.get("email", _mock_email),
             sub=stored_data.get("sub", "123456789"),
+            nonce="",
             base_url=base_url,
+            client_id=client_id,
         )
 
         # Update stored data
@@ -285,7 +282,9 @@ async def authorize_endpoint(
 
     # Add id_token and access_token to the response
     base_url = f"{request.url.scheme}://{request.url.netloc}"
-    id_token = create_mock_id_token(nonce=nonce, base_url=base_url)
+    id_token = create_mock_id_token(
+        email=_mock_email, sub="123456789", nonce=nonce, base_url=base_url, client_id=client_id
+    )
     access_token = f"mock_access_token_{int(time.time())}"
 
     params += f"&id_token={id_token}"
