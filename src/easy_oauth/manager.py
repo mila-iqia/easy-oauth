@@ -1,6 +1,7 @@
 import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from functools import cached_property
 
 import httpx
 from authlib.integrations.starlette_client import OAuth
@@ -27,18 +28,20 @@ class OAuthManager:
     capabilities: CapabilitySet = field(default_factory=lambda: CapabilitySet({}))
 
     # [serieux: ignore]
-    server_metadata: OpenIDConfiguration = None
-
-    # [serieux: ignore]
     token_cache: dict = field(default_factory=dict)
 
     def __post_init__(self):
-        if not self.force_user:
-            self.server_metadata = deserialize(OpenIDConfiguration, self.server_metadata_url)
-            self.secrets_serializer = URLSafeSerializer(self.secret_key)
         self.user_management_capability = self.capabilities.registry.registry.get(
             "user_management", None
         )
+
+    @cached_property
+    def server_metadata(self):
+        return deserialize(OpenIDConfiguration, self.server_metadata_url)
+
+    @cached_property
+    def secrets_serializer(self):
+        return URLSafeSerializer(self.secret_key)
 
     ###########
     # Helpers #
