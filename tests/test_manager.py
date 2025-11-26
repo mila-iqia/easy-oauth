@@ -29,7 +29,8 @@ def test_hello_nologin(app):
         assert response.status_code == 200
 
 
-def test_hello_login(app):
+def test_hello_login(app, set_email):
+    set_email("test@example.com")
     with httpx.Client() as client:
         client.get(f"{app}/login", follow_redirects=True)
         response = client.get(f"{app}/hello")
@@ -37,7 +38,8 @@ def test_hello_login(app):
         assert response.status_code == 200
 
 
-def test_logout(app):
+def test_logout(app, set_email):
+    set_email("test@example.com")
     with httpx.Client() as client:
         client.get(f"{app}/login", follow_redirects=True)
         assert client.get(f"{app}/hello").text == "Hello, test@example.com!"
@@ -45,7 +47,8 @@ def test_logout(app):
         assert client.get(f"{app}/hello").text == "Hello, None!"
 
 
-def test_hello_ensure(app):
+def test_hello_ensure(app, set_email):
+    set_email("test@example.com")
     with httpx.Client() as client:
         response = client.get(f"{app}/hello_ensure", follow_redirects=True)
         assert response.text == "Hello, test@example.com!"
@@ -60,7 +63,8 @@ def test_bake_ensure(app, set_email):
         assert response.status_code == 200
 
 
-def test_hello_token(app):
+def test_hello_token(app, set_email):
+    set_email("test@example.com")
     response = httpx.get(f"{app}/token", follow_redirects=True)
     token = response.json()["refresh_token"]
     response = httpx.get(f"{app}/hello", headers={"Authorization": f"Bearer {token}"})
@@ -78,7 +82,8 @@ def test_hello_bad_token(app):
     assert response.status_code in (401, 500)
 
 
-def test_hello_token_renew(app, freezer):
+def test_hello_token_renew(app, set_email, freezer):
+    set_email("test@example.com")
     response = httpx.get(f"{app}/token", follow_redirects=True)
     token = response.json()["refresh_token"]
     response = httpx.get(f"{app}/hello", headers={"Authorization": f"Bearer {token}"})

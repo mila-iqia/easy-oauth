@@ -41,10 +41,7 @@ def set_email(oauth_endpoint):
         assert response.status_code == 200
         return email
 
-    try:
-        yield set_email
-    finally:
-        set_email("test@example.com")
+    yield set_email
 
 
 @dataclass
