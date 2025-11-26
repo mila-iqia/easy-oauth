@@ -14,9 +14,9 @@ class D(dict):
         return self.get(attr, None)
 
 
-def test_oauth_flow(oauth_endpoint):
+def test_oauth_flow(oauth_mock):
     response = httpx.post(
-        f"{oauth_endpoint}/oauth2/token",
+        f"{oauth_mock.base_url}/oauth2/token",
         data={"grant_type": "authorization_code", "code": "test"},
     )
     assert response.status_code == 200

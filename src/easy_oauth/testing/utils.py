@@ -2,6 +2,7 @@ import threading
 import time
 from contextlib import contextmanager
 
+import httpx
 import uvicorn
 
 
@@ -63,3 +64,37 @@ def create_endpoint(app, host, port):
 
     # Cleanup: stop the server thread
     server_thread.stop()
+
+
+class OAuthMock:
+    def __init__(self, host="127.0.0.1", port=29313):
+        self.host = host
+        self.port = port
+        self.base_url = None
+        self._email = "test@example.com"
+        self._endpoint_context = None
+
+    def __enter__(self):
+        from .oauth_mock import app
+
+        self._endpoint_context = create_endpoint(app, self.host, self.port)
+        self.base_url = self._endpoint_context.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._endpoint_context:
+            self._endpoint_context.__exit__(exc_type, exc_val, exc_tb)
+
+    def set_email(self, email: str):
+        response = httpx.post(f"{self.base_url}/set_email", data={"email": email})
+        response.raise_for_status()
+        return response.json()
+
+    @property
+    def email(self):
+        return self._email
+
+    @email.setter
+    def email(self, value):
+        self.set_email(value)
+        self._email = value

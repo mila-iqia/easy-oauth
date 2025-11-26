@@ -10,8 +10,7 @@ import httpx
 import pytest
 from serieux import Sources
 
-from easy_oauth.testing.oauth_mock import app as oauth_app
-from easy_oauth.testing.utils import create_endpoint
+from easy_oauth.testing.utils import OAuthMock, create_endpoint
 
 from .app import make_app
 
@@ -23,25 +22,14 @@ here = Path(__file__).parent
 
 
 @pytest.fixture(scope="session")
-def oauth_endpoint():
-    """
-    Start the OAuth mock server in a background thread.
-
-    Yields:
-        str: The base URL of the mock OAuth server (e.g., "http://127.0.0.1:29313")
-    """
-    with create_endpoint(oauth_app, "127.0.0.1", OAUTH_PORT) as endpoint:
-        yield endpoint
+def oauth_mock():
+    with OAuthMock(port=OAUTH_PORT) as oauth:
+        yield oauth
 
 
 @pytest.fixture
-def set_email(oauth_endpoint):
-    def set_email(email):
-        response = httpx.post(f"{oauth_endpoint}/set_email", data={"email": email})
-        assert response.status_code == 200
-        return email
-
-    yield set_email
+def set_email(oauth_mock):
+    yield oauth_mock.set_email
 
 
 @dataclass
@@ -83,7 +71,7 @@ class TokenInteractor:
 
 
 @pytest.fixture(scope="session")
-def app(oauth_endpoint):
+def app(oauth_mock):
     port = next(_port)
     with create_endpoint(make_app(Path(here / "appconfig.yaml")), "127.0.0.1", port) as endpoint:
         yield endpoint
@@ -99,7 +87,7 @@ def user(app, set_email):
 
 
 @pytest.fixture
-def app_write(tmpdir, oauth_endpoint):
+def app_write(tmpdir, oauth_mock):
     port = next(_port)
     with create_endpoint(
         make_app(Path(here / "appconfig.yaml"), tmpdir), "127.0.0.1", port
