@@ -23,10 +23,8 @@ from uuid import uuid4
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from fastapi import FastAPI, Form, HTTPException
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
-
-PORT = 29313
 
 # Configurable email for mock responses
 _mock_email = "test@example.com"
@@ -58,14 +56,17 @@ _exponent = (
 
 
 def create_mock_id_token(
-    email: Optional[str] = None, sub: str = "123456789", nonce: Optional[str] = None
+    email: Optional[str] = None,
+    sub: str = "123456789",
+    nonce: Optional[str] = None,
+    base_url: str = "http://localhost:29313",
 ) -> str:
     """Create a JWT ID token with a real RS256 signature."""
     if email is None:
         email = _mock_email
     header = {"alg": "RS256", "typ": "JWT", "kid": "mock_key_id"}
     payload = {
-        "iss": f"http://localhost:{PORT}",
+        "iss": base_url,
         "aud": "mock_client_id",
         "azp": "mock_client_id",
         "sub": sub,
@@ -113,15 +114,16 @@ mock_auth_code_store = {}  # Store nonce and other data for auth codes
 
 
 @app.get("/.well-known/openid-configuration")
-async def openid_configuration():
+async def openid_configuration(request: Request):
     """Mock OpenID Connect configuration endpoint."""
+    base_url = f"{request.url.scheme}://{request.url.netloc}"
     return JSONResponse(
         {
-            "issuer": f"http://localhost:{PORT}",
-            "authorization_endpoint": f"http://localhost:{PORT}/oauth2/auth",
-            "token_endpoint": f"http://localhost:{PORT}/oauth2/token",
-            "userinfo_endpoint": f"http://localhost:{PORT}/oauth2/userinfo",
-            "jwks_uri": f"http://localhost:{PORT}/oauth2/certs",
+            "issuer": base_url,
+            "authorization_endpoint": f"{base_url}/oauth2/auth",
+            "token_endpoint": f"{base_url}/oauth2/token",
+            "userinfo_endpoint": f"{base_url}/oauth2/userinfo",
+            "jwks_uri": f"{base_url}/oauth2/certs",
             "response_types_supported": ["code", "token", "id_token"],
             "subject_types_supported": ["public"],
             "id_token_signing_alg_values_supported": ["RS256"],
@@ -141,6 +143,7 @@ async def openid_configuration():
 
 @app.post("/oauth2/token")
 async def token_endpoint(
+    request: Request,
     grant_type: str = Form(...),
     code: Optional[str] = Form(None),
     refresh_token: Optional[str] = Form(None),
@@ -170,7 +173,8 @@ async def token_endpoint(
                 },
             )
 
-        id_token = create_mock_id_token(nonce=nonce)
+        base_url = f"{request.url.scheme}://{request.url.netloc}"
+        id_token = create_mock_id_token(nonce=nonce, base_url=base_url)
 
         # Store token data for potential refresh
         mock_token_store[new_refresh_token] = {
@@ -206,9 +210,11 @@ async def token_endpoint(
         )
 
         new_access_token = f"mock_access_token_refreshed_{int(time.time())}"
+        base_url = f"{request.url.scheme}://{request.url.netloc}"
         new_id_token = create_mock_id_token(
             email=stored_data.get("email", _mock_email),
             sub=stored_data.get("sub", "123456789"),
+            base_url=base_url,
         )
 
         # Update stored data
@@ -253,6 +259,7 @@ async def userinfo_endpoint():
 
 @app.get("/oauth2/auth")
 async def authorize_endpoint(
+    request: Request,
     client_id: str,
     redirect_uri: str,
     response_type: str = "code",
@@ -277,7 +284,8 @@ async def authorize_endpoint(
         params += f"&state={state}"
 
     # Add id_token and access_token to the response
-    id_token = create_mock_id_token(nonce=nonce)
+    base_url = f"{request.url.scheme}://{request.url.netloc}"
+    id_token = create_mock_id_token(nonce=nonce, base_url=base_url)
     access_token = f"mock_access_token_{int(time.time())}"
 
     params += f"&id_token={id_token}"
@@ -327,8 +335,9 @@ async def set_email(email: str = Form(...)):
 
 
 @app.get("/")
-async def root():
+async def root(request: Request):
     """Root endpoint with server info."""
+    base_url = f"{request.url.scheme}://{request.url.netloc}"
     return {
         "name": "Mock Google OAuth2 Server",
         "version": "1.0.0",
@@ -340,9 +349,9 @@ async def root():
             "openid_configuration": "/.well-known/openid-configuration",
         },
         "test_commands": {
-            "get_token": f"curl -X POST http://localhost:{PORT}/oauth2/token -d 'grant_type=authorization_code&code=test'",
-            "refresh_token": f"curl -X POST http://localhost:{PORT}/oauth2/token -d 'grant_type=refresh_token&refresh_token=YOUR_REFRESH_TOKEN'",
-            "get_userinfo": f"curl http://localhost:{PORT}/oauth2/userinfo",
-            "set_email": f"curl -X POST http://localhost:{PORT}/set_email -d 'email=custom@example.com'",
+            "get_token": f"curl -X POST {base_url}/oauth2/token -d 'grant_type=authorization_code&code=test'",
+            "refresh_token": f"curl -X POST {base_url}/oauth2/token -d 'grant_type=refresh_token&refresh_token=YOUR_REFRESH_TOKEN'",
+            "get_userinfo": f"curl {base_url}/oauth2/userinfo",
+            "set_email": f"curl -X POST {base_url}/set_email -d 'email=custom@example.com'",
         },
     }

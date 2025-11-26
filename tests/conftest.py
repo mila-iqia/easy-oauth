@@ -14,9 +14,9 @@ import uvicorn
 from serieux import Sources
 
 from .app import make_app
-from .oauth_mock import PORT as OAUTH_PORT
 from .oauth_mock import app as oauth_app
 
+OAUTH_PORT = 29313
 _port = count(OAUTH_PORT + randint(1, 1000))
 
 
