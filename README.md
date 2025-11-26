@@ -209,9 +209,28 @@ The following routes are only added if there is a `user_management` capability:
   - Request body: `{"email": "<email>", "capabilities": ["<cap1>", "<cap2>", ...]}`
   - Response: `{"status": "ok", "email": "<email>", "capabilities": [...]}`
 
+
+## Testing
+
+For testing, easy_oauth defines a mock OAuth server that always logs you in unconditionally as `test@example.com` by default. That way you don't need a browser or any secrets to test things.
+
+```bash
+uvicorn easy_oauth.testing.oauth_mock:app
+```
+
+To set the email address the mock OAuth server with authentify all requests as, send a POST request with JSON data like this:
+
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{"email": "a@b.c"}' http://127.0.0.1:8000/set_email
+```
+
+To use it with easy_oauth, set `server_metadata_url` to `http://127.0.0.1:8000/.well-known/openid-configuration` (depending on the host and port).
+
+
 ## TODO
 
 There are a few things that need to be done in the future:
 
 * Add an endpoint to revoke tokens.
 * Users with `user_management` capability should only be able to add/remove capabilities that they have.
+* API tokens associated to capabilities but not accounts
