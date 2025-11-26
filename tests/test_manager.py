@@ -209,3 +209,43 @@ def test_set_capability(user_write, tmpdir):
 
     new_caps = deserialize(dict[str, set[str]], Path(tmpdir / "caps.yaml"))
     assert new_caps[u.email] == {"baker"}
+
+
+def test_force_admin(app_force_user):
+    with app_force_user("admin@admin.admin") as app:
+        resp = httpx.get(f"{app}/hello")
+        assert resp.status_code == 200
+        assert resp.text == "Hello, admin@admin.admin!"
+
+        resp = httpx.get(f"{app}/murder", params={"target": "Bart"})
+        assert resp.status_code == 200
+        assert resp.text == "Bart was murdered by admin@admin.admin"
+
+        resp = httpx.get(f"{app}/bake", params={"food": "chocolate cake"})
+        assert resp.status_code == 200
+        assert resp.text == "chocolate cake was baked by admin@admin.admin"
+
+
+def test_force_cap(app_force_user):
+    with app_force_user("boss@corleone.com") as app:
+        resp = httpx.get(f"{app}/hello")
+        assert resp.status_code == 200
+        assert resp.text == "Hello, boss@corleone.com!"
+
+        resp = httpx.get(f"{app}/murder", params={"target": "Lisa"})
+        assert resp.status_code == 200
+        assert resp.text == "Lisa was murdered by boss@corleone.com"
+
+        resp = httpx.get(f"{app}/bake", params={"food": "baguette"})
+        assert resp.status_code == 403  # boss does not have baker capability
+
+
+def test_force_user_token(app_force_user):
+    # Make sure the token flow is still valid
+    with app_force_user("admin@admin.admin") as app:
+        response = httpx.get(f"{app}/token", follow_redirects=True)
+        token = response.json()["refresh_token"]
+        assert token == "XXX"
+        response = httpx.get(f"{app}/hello", headers={"Authorization": f"Bearer {token}"})
+        assert response.text == "Hello, admin@admin.admin!"
+        assert response.status_code == 200

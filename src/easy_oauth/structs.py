@@ -42,7 +42,11 @@ class UserInfo(Base):
     email: str
 
     # The user's unique ID
-    sub: str
+    sub: str = None
+
+    def __post_init__(self):
+        if self.sub is None:
+            self.sub = self.email
 
     @classmethod
     def serieux_from_string(cls, idtoken):

@@ -1,0 +1,16 @@
+server_metadata_url: "n/a"
+capabilities:
+  auto_admin: true
+  user_file: caps.yaml
+  graph:
+    user_management: []
+    villager: []
+    mafia:
+      - villager
+    police:
+      - villager
+    mayor:
+      - villager
+      - police
+    baker:
+      - villager

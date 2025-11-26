@@ -11,10 +11,10 @@ from easy_oauth.manager import OAuthManager
 here = Path(__file__).parent
 
 
-def make_app(tmpdir: Path = None):
+def make_app(config_path, tmpdir: Path = None):
     app = FastAPI()
 
-    oauth = deserialize(OAuthManager, Path(here / "appconfig.yaml"))
+    oauth = deserialize(OAuthManager, config_path)
 
     if tmpdir is not None:
         dest_cap_file = Path(tmpdir) / oauth.capabilities.user_file.name

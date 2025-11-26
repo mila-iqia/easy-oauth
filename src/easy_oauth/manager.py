@@ -19,11 +19,11 @@ from .structs import OpenIDConfiguration, Payload, UserInfo
 @dataclass(kw_only=True)
 class OAuthManager:
     server_metadata_url: str
-    client_kwargs: dict[str, str]
+    client_kwargs: dict[str, str] = field(default_factory=dict)
     secret_key: Secret[str] = field(default_factory=lambda: secrets.token_urlsafe(32))
     client_id: Secret[str] = None
     client_secret: Secret[str] = None
-    enable: bool = True
+    force_user: UserInfo = None
     capabilities: CapabilitySet = field(default_factory=lambda: CapabilitySet({}))
 
     # [serieux: ignore]
@@ -33,8 +33,9 @@ class OAuthManager:
     token_cache: dict = field(default_factory=dict)
 
     def __post_init__(self):
-        self.server_metadata = deserialize(OpenIDConfiguration, self.server_metadata_url)
-        self.secrets_serializer = URLSafeSerializer(self.secret_key)
+        if not self.force_user:
+            self.server_metadata = deserialize(OpenIDConfiguration, self.server_metadata_url)
+            self.secrets_serializer = URLSafeSerializer(self.secret_key)
         self.user_management_capability = self.capabilities.registry.registry.get(
             "user_management", None
         )
@@ -53,6 +54,8 @@ class OAuthManager:
             )
 
     async def get_user(self, request: Request):
+        if self.force_user:
+            return serialize(UserInfo, self.force_user)
         if auth := request.headers.get("Authorization"):
             match auth.split("Bearer "):
                 case ("", rtoken):
@@ -143,6 +146,10 @@ class OAuthManager:
         red = request.session.get("redirect_after_login", "/")
         request.session.clear()
         request.session["redirect_after_login"] = red
+        if self.force_user:  # pragma: no cover
+            # Pages won't redirect to /login when force_user is True,
+            # so this won't happen unless the user directly goes to /login
+            return RedirectResponse(url=red)
         auth_route = request.query_params.get("redirect", "auth")
         redirect_uri = request.url_for(auth_route)
         params = {}
@@ -155,11 +162,14 @@ class OAuthManager:
         )
 
     async def route_auth(self, request):
-        await self.assimilate_payload(request)
+        if not self.force_user:
+            await self.assimilate_payload(request)
         red = request.session.get("redirect_after_login", "/")
         return RedirectResponse(url=red)
 
     async def route_token(self, request):
+        if self.force_user:
+            return JSONResponse({"refresh_token": "XXX"})
         if state := request.query_params.get("state"):
             await self.assimilate_payload(request)
 
@@ -257,9 +267,6 @@ class OAuthManager:
     ##################
 
     def install(self, app):
-        if not self.enable:  # pragma: no cover
-            return
-
         app.add_middleware(
             SessionMiddleware,
             secret_key=self.secret_key,
