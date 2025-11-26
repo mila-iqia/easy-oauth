@@ -8,6 +8,9 @@ client_kwargs:
 capabilities:
   auto_admin: true
   user_file: caps.yaml
+  user_overrides:
+    mega-admin@admin.admin:
+      - admin
   graph:
     user_management: []
     villager: []

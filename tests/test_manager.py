@@ -120,6 +120,7 @@ def test_no_capability(app):
     D(user="hubert.bonjour@courrier-chaud.fr", status=403),
     D(user="wiggum@springfield.us", status=403),
     D(user="admin@admin.admin"),
+    D(user="mega-admin@admin.admin"),
 )
 def test_capability_admin(user, query):
     u = user(query.user)
@@ -192,6 +193,33 @@ def test_remove_capability(user_write, tmpdir):
 
     new_caps = deserialize(dict[str, set[str]], Path(tmpdir / "caps.yaml"))
     assert new_caps[u.email] == set()
+
+
+def test_admin_override_persists(user_write, tmpdir):
+    """
+    Removing the 'admin' capability from mega-admin@admin.admin
+    should not make them lose 'admin', since it is an override in appconfig.yaml.
+    """
+    u = user_write("mega-admin@admin.admin")
+    admin = user_write("admin@admin.admin")
+
+    # Sanity: mega-admin can perform admin-only action
+    response = u.get("/god")
+    assert response.status_code == 200
+    assert response.text == f"{u.email} is god"
+
+    # Remove admin explicitly in assigned capabilities (file-backed)
+    admin.post("/manage_capabilities/remove", email=u.email, capability="admin")
+
+    # Still must have admin cap due to override, can still perform admin action
+    response2 = u.get("/god")
+    assert response2.status_code == 200
+    assert response2.text == f"{u.email} is god"
+
+    # In fact, the capabilities file must NOT contain "admin" for mega-admin@admin.admin,
+    # but the API should still report it as an effective capability
+    caps_file = deserialize(dict[str, set[str]], Path(tmpdir / "caps.yaml"))
+    assert "admin" not in caps_file.get(u.email, set())
 
 
 def test_set_capability(user_write, tmpdir):

@@ -6,7 +6,7 @@ Small package to add OAuth-based authentication to a Starlette/FastAPI app. User
 
 ## Install
 
-`uv add https://github.com/mila-iqia/easy-oauth@v0.0.1`
+`uv add git+https://github.com/mila-iqia/easy-oauth@v0.0.1`
 
 
 ## Usage

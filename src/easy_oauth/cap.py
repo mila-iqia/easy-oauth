@@ -27,6 +27,7 @@ class CapabilitySet:
         graph: dict[str, list[str]],
         auto_admin: bool = True,
         user_file: Path = None,
+        user_overrides: dict[str, list[str]] = None,
     ):
         self.registry = Registry()
         for name in graph:
@@ -39,6 +40,7 @@ class CapabilitySet:
             )
         self.captype = Capability @ self.registry
         self.user_file = user_file
+        self.user_overrides = deserialize(dict[str, set[self.captype]], user_overrides or {})
 
     def __getitem__(self, item):
         return self.registry.registry[item]
@@ -51,4 +53,6 @@ class CapabilitySet:
         )
 
     def check(self, email, cap):
-        return cap in Capability(implies=self.db.value.get(email, set()))
+        caps = self.db.value.get(email, set())
+        overrides = self.user_overrides.get(email, set())
+        return cap in Capability(implies={*caps, *overrides})
