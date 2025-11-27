@@ -51,6 +51,8 @@ oauth = OAuthManager(
         # File where each user's capability is stored
         user_file="caps.yaml",
     ),
+    # If you want routes to be at /api/v1/login etc., put "/api/v1" here
+    prefix="",
 )
 
 app = FastAPI()
@@ -122,6 +124,7 @@ capabilities:
     user_management: []
   auto_admin: true
   user_file: caps.yaml
+prefix: ""
 ```
 
 And instantiated like this:
@@ -225,6 +228,46 @@ curl -X POST -H "Content-Type: application/json" -d '{"email": "a@b.c"}' http://
 ```
 
 To use it with easy_oauth, set `server_metadata_url` to `http://127.0.0.1:8000/.well-known/openid-configuration` (depending on the host and port).
+
+
+### Fixtures
+
+easy-oauth provides the `OAuthMock` and `AppTester` classes to make testing easier. Here is a very simple example of how to use them:
+
+
+```python
+from easy_oauth.testing.utils import AppTester, OAuthMock
+
+@pytest.fixture(scope="session")
+def oauth_mock():
+    # Start one mock oauth server for the session. It's important that the
+    # OAUTH_PORT conforms to the server_metadata_url you configure the test app
+    # with
+    with OAuthMock(port=OAUTH_PORT) as oauth:
+        yield oauth
+
+@pytest.fixture(scope="session")
+def app(oauth_mock):
+    # This doesn't have to be session-scoped, but if your app is read-only it may
+    # as well be.
+    with AppTester(your_app, oauth_mock) as appt:
+        yield appt
+
+def test_view_payroll(app):
+    # Use app.client to pretend to be various users
+    guest = app.client()
+    user = app.client("simple.user@website.web")
+    accountant = app.client("mr.bean@website.web")
+    admin = app.client("admin@website.web")
+
+    # Guests are not authentified (so we expect HTTP error 401)
+    guest.get("/payroll/view", expect=401)
+    # Normal users are unauthorized to view the payroll
+    user.get("/payroll/view", expect=403)
+    # Accountants and admins are authorized
+    accountant.get("/payroll/view", expect=200)
+    admin.get("/payroll/view", expect=200)
+```
 
 
 ## TODO
