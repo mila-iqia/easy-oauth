@@ -101,10 +101,10 @@ class OAuthManager:
                 email = await self.ensure_email(request)
             else:
                 email = await self.get_email(request)
-            if email is None:
-                raise HTTPException(status_code=401, detail="Authentication required")
-            elif cap is None or self.capabilities.check(email, cap):
+            if cap is None or self.capabilities.check(email, cap):
                 yield email
+            elif email is None:
+                raise HTTPException(status_code=401, detail="Authentication required")
             else:
                 raise HTTPException(status_code=403, detail=f"{cap} capability required")
 

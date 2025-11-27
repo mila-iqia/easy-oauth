@@ -62,4 +62,18 @@ def make_app(config_path, tmpdir: Path = None):
     ):
         return PlainTextResponse(f"{email} is god")
 
+    @app.get("/visit")
+    async def route_visit(
+        request: Request,
+        email: str = Depends(oauth.get_email_capability("traveller")),
+    ):
+        return PlainTextResponse(f"{email} visited")
+
+    @app.get("/farm")
+    async def route_farm(
+        request: Request,
+        email: str = Depends(oauth.get_email_capability("villager")),
+    ):
+        return PlainTextResponse(f"{email} farmed")
+
     return app

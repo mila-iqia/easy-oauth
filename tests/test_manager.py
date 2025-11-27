@@ -347,3 +347,35 @@ def test_prefix(app_prefix):
     response = httpx.get(f"{app_prefix}/hello", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert response.text == "Hello, token@example.com!"
+
+
+def test_guest_capabilities(app_default_caps):
+    """Test that guest users (not logged in) have guest capabilities."""
+    # Guest should have traveller capability
+    guest = app_default_caps.client()
+    assert guest.get("/visit").text == "None visited"
+
+    # Guest should NOT have villager capability
+    guest.get("/farm", expect=401)
+
+
+def test_default_capabilities(app_default_caps):
+    """Test that authenticated users have default capabilities."""
+    # User with no explicit capabilities in caps.yaml should still have default caps
+    user = app_default_caps.client("newcomer@example.com")
+
+    # Should have villager (default capability)
+    assert user.get("/farm").text == "newcomer@example.com farmed"
+
+
+def test_default_capabilities_with_explicit_caps(app_default_caps):
+    """Test that default capabilities are added to explicit capabilities."""
+    # User with explicit mafia capability should also have default caps
+    user = app_default_caps.client("boss@corleone.com")
+
+    # Should have mafia (explicit)
+    resp = user.get("/murder", target="Target")
+    assert resp.text == "Target was murdered by boss@corleone.com"
+
+    # Should also have villager (default)
+    assert user.get("/farm").text == "boss@corleone.com farmed"

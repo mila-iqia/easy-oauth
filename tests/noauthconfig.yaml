@@ -4,6 +4,7 @@ capabilities:
   user_file: caps.yaml
   graph:
     user_management: []
+    traveller: []
     villager: []
     mafia:
       - villager

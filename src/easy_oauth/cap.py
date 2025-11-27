@@ -28,6 +28,8 @@ class CapabilitySet:
         auto_admin: bool = True,
         user_file: Path = None,
         user_overrides: dict[str, list[str]] = None,
+        default_capabilities: list[str] = None,
+        guest_capabilities: list[str] = None,
     ):
         self.registry = Registry()
         for name in graph:
@@ -41,6 +43,8 @@ class CapabilitySet:
         self.captype = Capability @ self.registry
         self.user_file = user_file
         self.user_overrides = deserialize(dict[str, set[self.captype]], user_overrides or {})
+        self.default_capabilities = deserialize(set[self.captype], default_capabilities or [])
+        self.guest_capabilities = deserialize(set[self.captype], guest_capabilities or [])
 
     def __getitem__(self, item):
         return self.registry.registry[item]
@@ -53,6 +57,10 @@ class CapabilitySet:
         )
 
     def check(self, email, cap):
+        if email is None:
+            # Guest user (not authenticated)
+            return cap in Capability(implies=self.guest_capabilities)
+
         caps = self.db.value.get(email, set())
         overrides = self.user_overrides.get(email, set())
-        return cap in Capability(implies={*caps, *overrides})
+        return cap in Capability(implies={*caps, *overrides, *self.default_capabilities})

@@ -50,6 +50,10 @@ oauth = OAuthManager(
         auto_admin=True,
         # File where each user's capability is stored
         user_file="caps.yaml",
+        # Capabilities granted to all authenticated users
+        default_capabilities=["read"],
+        # Capabilities granted to unauthenticated users (guests)
+        guest_capabilities=[],
     ),
     # If you want routes to be at /api/v1/login etc., put "/api/v1" here
     prefix="",
@@ -124,6 +128,8 @@ capabilities:
     user_management: []
   auto_admin: true
   user_file: caps.yaml
+  default_capabilities: [read]
+  guest_capabilities: []
 prefix: ""
 ```
 

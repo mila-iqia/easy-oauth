@@ -52,3 +52,10 @@ def app_force_user(tmpdir, oauth_mock):
             yield appt.base_url
 
     yield make
+
+
+@pytest.fixture
+def app_default_caps(tmpdir, oauth_mock):
+    app = make_app(Path(here / "defaultcaps.yaml"), tmpdir)
+    with AppTester(app, oauth_mock) as appt:
+        yield appt

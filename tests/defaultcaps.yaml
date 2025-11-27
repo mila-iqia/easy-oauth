@@ -1,4 +1,3 @@
-prefix: /api/v1
 server_metadata_url: http://127.0.0.1:29313/.well-known/openid-configuration
 secret_key: "5K20tAALrsnxBrCKXbot"
 client_id: "mock_client_id"
@@ -12,6 +11,10 @@ capabilities:
   user_overrides:
     mega-admin@admin.admin:
       - admin
+  default_capabilities:
+    - villager
+  guest_capabilities:
+    - traveller
   graph:
     user_management: []
     traveller: []
