@@ -70,23 +70,51 @@ def create_endpoint(app, host, port, wrap=nullcontext):
     server_thread.stop()
 
 
-class OAuthMock:
-    def __init__(self, host="127.0.0.1", port=29313):
+class BaseServer:
+    def __init__(self, app, host, port, wrap=nullcontext):
+        self.app = app
         self.host = host
-        self.port = port
+        self.port = port or (30000 + randint(1, 9999))
+        self.wrap = wrap
         self.base_url = None
-        self._endpoint_context = None
 
     def __enter__(self):
-        from .oauth_mock import app
+        # Start server in background thread
+        server_thread = ServerThread(app=self.app, host=self.host, port=self.port, wrap=self.wrap)
+        server_thread.start()
 
-        self._endpoint_context = create_endpoint(app, self.host, self.port)
-        self.base_url = self._endpoint_context.__enter__()
+        # Wait for server to be ready
+        base_url = f"http://{self.host}:{self.port}"
+        max_retries = 50
+        retry_delay = 0.1
+
+        for _ in range(max_retries):
+            try:
+                import httpx
+
+                with httpx.Client() as client:
+                    response = client.get(f"{base_url}/health", timeout=1.0)
+                    if response.status_code in (200, 404):
+                        break
+            except (httpx.ConnectError, httpx.TimeoutException):
+                time.sleep(retry_delay)
+        else:
+            raise RuntimeError(f"Server failed to start on {base_url}")
+
+        self._thread = server_thread
+        self.base_url = base_url
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._endpoint_context:
-            self._endpoint_context.__exit__(exc_type, exc_val, exc_tb)
+        if self._thread:
+            self._thread.stop()
+
+
+class OAuthMock(BaseServer):
+    def __init__(self, host="127.0.0.1", port=29313):
+        from .oauth_mock import app
+
+        super().__init__(app=app, host=host, port=port)
 
     def set_email(self, email: str):
         response = httpx.post(f"{self.base_url}/set_email", data={"email": email})
@@ -94,24 +122,10 @@ class OAuthMock:
         return response.json()
 
 
-class AppTester:
+class AppTester(BaseServer):
     def __init__(self, app, oauth_mock: OAuthMock, host="127.0.0.1", port=None, wrap=nullcontext):
-        self.app = app
+        super().__init__(app=app, host=host, port=port, wrap=wrap)
         self.oauth_mock = oauth_mock
-        self.host = host
-        self.port = port or (30000 + randint(1, 9999))
-        self.base_url = None
-        self.wrap = wrap
-        self._endpoint_context = None
-
-    def __enter__(self):
-        self._endpoint_context = create_endpoint(self.app, self.host, self.port, wrap=self.wrap)
-        self.base_url = self._endpoint_context.__enter__()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._endpoint_context:
-            self._endpoint_context.__exit__(exc_type, exc_val, exc_tb)
 
     def set_email(self, email):
         return self.oauth_mock.set_email(email)
