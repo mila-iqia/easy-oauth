@@ -130,11 +130,14 @@ class AppTester(BaseServer):
     def set_email(self, email):
         return self.oauth_mock.set_email(email)
 
-    def client(self, email):
-        self.set_email(email)
-        response = httpx.get(f"{self.base_url}/token", follow_redirects=True)
-        assert response.status_code == 200
-        token = response.json()["refresh_token"]
+    def client(self, email=None):
+        if email is None:
+            token = None
+        else:
+            self.set_email(email)
+            response = httpx.get(f"{self.base_url}/token", follow_redirects=True)
+            assert response.status_code == 200
+            token = response.json()["refresh_token"]
         return TokenInteractor(self.base_url, email, token)
 
     def __str__(self):
@@ -145,7 +148,13 @@ class AppTester(BaseServer):
 class TokenInteractor:
     root: str
     email: str
-    token: str
+    token: str | None
+
+    def __post_init__(self):
+        if self.token is None:
+            self.headers = {}
+        else:
+            self.headers = {"Authorization": f"Bearer {self.token}"}
 
     def expect(self, response, expect=None):
         expect = 200 if expect is None else expect
@@ -156,17 +165,9 @@ class TokenInteractor:
         return response
 
     def get(self, endpoint, expect=None, **data):
-        response = httpx.get(
-            f"{self.root}{endpoint}",
-            headers={"Authorization": f"Bearer {self.token}"},
-            params=data,
-        )
+        response = httpx.get(f"{self.root}{endpoint}", headers=self.headers, params=data)
         return self.expect(response, expect)
 
     def post(self, endpoint, expect=None, **data):
-        response = httpx.post(
-            f"{self.root}{endpoint}",
-            headers={"Authorization": f"Bearer {self.token}"},
-            json=data,
-        )
+        response = httpx.post(f"{self.root}{endpoint}", headers=self.headers, json=data)
         return self.expect(response, expect)
