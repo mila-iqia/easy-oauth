@@ -36,6 +36,13 @@ def app_write(tmpdir, oauth_mock):
 
 
 @pytest.fixture
+def app_prefix(tmpdir, oauth_mock):
+    app = make_app(Path(here / "prefixconfig.yaml"), tmpdir)
+    with AppTester(app, oauth_mock) as appt:
+        yield appt
+
+
+@pytest.fixture
 def app_force_user(tmpdir, oauth_mock):
     @contextmanager
     def make(email):

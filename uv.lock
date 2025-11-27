@@ -435,7 +435,7 @@ wheels = [
 
 [[package]]
 name = "pydantic"
-version = "2.12.4"
+version = "2.12.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-types" },
@@ -443,9 +443,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/96/ad/a17bc283d7d81837c061c49e3eaa27a45991759a1b7eae1031921c6bd924/pydantic-2.12.4.tar.gz", hash = "sha256:0f8cb9555000a4b5b617f66bfd2566264c4984b27589d3b845685983e8ea85ac", size = 821038, upload-time = "2025-11-05T10:50:08.59Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/44/36f1a6e523abc58ae5f928898e4aca2e0ea509b5aa6f6f392a5d882be928/pydantic-2.12.5.tar.gz", hash = "sha256:4d351024c75c0f085a9febbb665ce8c0c6ec5d30e903bdb6394b7ede26aebb49", size = 821591, upload-time = "2025-11-26T15:11:46.471Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/82/2f/e68750da9b04856e2a7ec56fc6f034a5a79775e9b9a81882252789873798/pydantic-2.12.4-py3-none-any.whl", hash = "sha256:92d3d202a745d46f9be6df459ac5a064fdaa3c1c4cd8adcfa332ccf3c05f871e", size = 463400, upload-time = "2025-11-05T10:50:06.732Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/87/b70ad306ebb6f9b585f114d0ac2137d792b48be34d732d60e597c2f8465a/pydantic-2.12.5-py3-none-any.whl", hash = "sha256:e561593fccf61e8a20fc46dfc2dfe075b8be7d0188df33f221ad1f0139180f9d", size = 463580, upload-time = "2025-11-26T15:11:44.605Z" },
 ]
 
 [[package]]
@@ -640,14 +640,14 @@ wheels = [
 
 [[package]]
 name = "serieux"
-version = "0.3.5"
+version = "0.3.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ovld" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/78/12/2e1a4909fe31fbf612a442be559aee98c9eab90c04e9dbe4b508c4a31010/serieux-0.3.5.tar.gz", hash = "sha256:42ae6c437e4f85fb00bb56332c7d64bd25c14dfa7366981caed9a87ac0ca58c8", size = 169823, upload-time = "2025-11-25T20:46:53.77Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7f/7b/6d19bcb8cafd947dc967603e0e3cf94affd9547ab8884b1e7dbc6d5888ce/serieux-0.3.6.tar.gz", hash = "sha256:ed599944fc25c242d87440b95f8d2ed00772b171635719f29ecaadf11ecbc223", size = 171704, upload-time = "2025-11-26T16:40:11.912Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ef/b8/762d4f877eff7b6cb55c7ba1f805dd8af2a53857b8008d996101a2dd9237/serieux-0.3.5-py3-none-any.whl", hash = "sha256:5891f49ca59667055cc741d0707423127c8a702e2cc3783713abb943df37c381", size = 53469, upload-time = "2025-11-25T20:46:52.353Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/9c/db200d9153adb4ac65d4072ebd4858d342361b99910276181e4fa9f92e5d/serieux-0.3.6-py3-none-any.whl", hash = "sha256:c912823e4be87bfb4c11c3f9aabca5699b0468aeb9946597fd4c14bbbf444c14", size = 53506, upload-time = "2025-11-26T16:40:10.537Z" },
 ]
 
 [[package]]

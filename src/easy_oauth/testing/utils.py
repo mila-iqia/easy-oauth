@@ -130,12 +130,12 @@ class AppTester(BaseServer):
     def set_email(self, email):
         return self.oauth_mock.set_email(email)
 
-    def client(self, email=None):
+    def client(self, email=None, prefix=""):
         if email is None:
             token = None
         else:
             self.set_email(email)
-            response = httpx.get(f"{self.base_url}/token", follow_redirects=True)
+            response = httpx.get(f"{self.base_url}{prefix}/token", follow_redirects=True)
             assert response.status_code == 200
             token = response.json()["refresh_token"]
         return TokenInteractor(self.base_url, email, token)

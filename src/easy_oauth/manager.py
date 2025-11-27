@@ -26,6 +26,7 @@ class OAuthManager:
     client_secret: Secret[str] = None
     force_user: UserInfo = None
     capabilities: CapabilitySet = field(default_factory=lambda: CapabilitySet({}))
+    prefix: str = ""
 
     # [serieux: ignore]
     token_cache: dict = field(default_factory=dict)
@@ -289,26 +290,28 @@ class OAuthManager:
         )
         self.oauth = getattr(oauth, "easy-oauth")
 
-        app.add_route("/login", self.route_login, name="login")
-        app.add_route("/logout", self.route_logout)
-        app.add_route("/auth", self.route_auth, name="auth")
-        app.add_route("/token", self.route_token, name="token")
+        app.add_route(f"{self.prefix}/login", self.route_login, name="login")
+        app.add_route(f"{self.prefix}/logout", self.route_logout)
+        app.add_route(f"{self.prefix}/auth", self.route_auth, name="auth")
+        app.add_route(f"{self.prefix}/token", self.route_token, name="token")
 
         if self.user_management_capability:
             app.add_route(
-                "/manage_capabilities/add",
+                f"{self.prefix}/manage_capabilities/add",
                 self.route_manage_capabilities_add,
                 methods=["POST"],
             )
             app.add_route(
-                "/manage_capabilities/remove",
+                f"{self.prefix}/manage_capabilities/remove",
                 self.route_manage_capabilities_remove,
                 methods=["POST"],
             )
             app.add_route(
-                "/manage_capabilities/set",
+                f"{self.prefix}/manage_capabilities/set",
                 self.route_manage_capabilities_set,
                 methods=["POST"],
             )
 
-        app.add_route("/manage_capabilities/list", self.route_manage_capabilities_list)
+        app.add_route(
+            f"{self.prefix}/manage_capabilities/list", self.route_manage_capabilities_list
+        )

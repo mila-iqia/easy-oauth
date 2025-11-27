@@ -1,0 +1,26 @@
+prefix: /api/v1
+server_metadata_url: http://127.0.0.1:29313/.well-known/openid-configuration
+secret_key: "5K20tAALrsnxBrCKXbot"
+client_id: "mock_client_id"
+client_secret: "dHPf4JQhK9VutnlJlcln"
+client_kwargs:
+  scope: openid email
+  prompt: select_account
+capabilities:
+  auto_admin: true
+  user_file: caps.yaml
+  user_overrides:
+    mega-admin@admin.admin:
+      - admin
+  graph:
+    user_management: []
+    villager: []
+    mafia:
+      - villager
+    police:
+      - villager
+    mayor:
+      - villager
+      - police
+    baker:
+      - villager

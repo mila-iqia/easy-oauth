@@ -282,3 +282,68 @@ def test_force_user_token(app_force_user):
         response = httpx.get(f"{app}/hello", headers={"Authorization": f"Bearer {token}"})
         assert response.text == "Hello, admin@admin.admin!"
         assert response.status_code == 200
+
+
+def test_prefix(app_prefix):
+    """Test that all routes work properly with the /api/v1 prefix."""
+    prefix = "/api/v1"
+
+    # Test root route without login
+    response = httpx.get(f"{app_prefix}/")
+    assert response.status_code == 200
+    assert response.text == "root"
+
+    # Test health route
+    response = httpx.get(f"{app_prefix}/health")
+    assert response.status_code == 200
+    assert response.json() == {"active": True}
+
+    # Test hello without login
+    response = httpx.get(f"{app_prefix}/hello")
+    assert response.status_code == 200
+    assert response.text == "Hello, None!"
+
+    # Test hello with login
+    app_prefix.set_email("test@example.com")
+    with httpx.Client() as client:
+        client.get(f"{app_prefix}{prefix}/login", follow_redirects=True)
+        response = client.get(f"{app_prefix}/hello")
+        assert response.status_code == 200
+        assert response.text == "Hello, test@example.com!"
+
+        # Test logout
+        client.get(f"{app_prefix}{prefix}/logout")
+        response = client.get(f"{app_prefix}/hello")
+        assert response.status_code == 200
+        assert response.text == "Hello, None!"
+
+    # Test hello_ensure with login
+    app_prefix.set_email("test@example.com")
+    with httpx.Client() as client:
+        response = client.get(f"{app_prefix}/hello_ensure", follow_redirects=True)
+        assert response.status_code == 200
+        assert response.text == "Hello, test@example.com!"
+
+    # Test capability-restricted routes
+    u = app_prefix.client("paul.baguette@corleone.com", prefix=prefix)
+    response = u.get("/bake", food="croissant")
+    assert response.status_code == 200
+    assert response.text == "croissant was baked by paul.baguette@corleone.com"
+
+    response = u.get("/murder", target="Target")
+    assert response.status_code == 200
+    assert response.text == "Target was murdered by paul.baguette@corleone.com"
+
+    # Test admin capability
+    admin = app_prefix.client("admin@admin.admin", prefix=prefix)
+    response = admin.get("/god")
+    assert response.status_code == 200
+    assert response.text == "admin@admin.admin is god"
+
+    # Test token authentication with prefix
+    app_prefix.set_email("token@example.com")
+    response = httpx.get(f"{app_prefix}{prefix}/token", follow_redirects=True)
+    token = response.json()["refresh_token"]
+    response = httpx.get(f"{app_prefix}/hello", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.text == "Hello, token@example.com!"
