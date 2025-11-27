@@ -74,7 +74,7 @@ def test_hello_token(app):
 
 def test_hello_bad_token(app):
     response = httpx.get(f"{app}/hello", headers={"Authorization": "Bearer XXX"})
-    assert response.status_code in (401, 500)
+    assert response.status_code == 401
 
     oauth = deserialize(OAuthManager, Path(here / "appconfig.yaml"))
     token = oauth.secrets_serializer.dumps("XXX")

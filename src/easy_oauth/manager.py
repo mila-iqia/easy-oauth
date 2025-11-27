@@ -5,7 +5,7 @@ from functools import cached_property
 
 import httpx
 from authlib.integrations.starlette_client import OAuth
-from itsdangerous import URLSafeSerializer
+from itsdangerous import BadData, URLSafeSerializer
 from serieux import deserialize, serialize
 from serieux.features.encrypt import Secret
 from starlette.exceptions import HTTPException
@@ -62,7 +62,10 @@ class OAuthManager:
         if auth := request.headers.get("Authorization"):
             match auth.split("Bearer "):
                 case ("", rtoken):
-                    rtoken = self.secrets_serializer.loads(rtoken)
+                    try:
+                        rtoken = self.secrets_serializer.loads(rtoken)
+                    except BadData:
+                        raise HTTPException(status_code=401, detail="Malformed authorization")
                     if user := await self.user_from_refresh_token(rtoken):
                         user = serialize(UserInfo, user)
                         request.session["user"] = user
