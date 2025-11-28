@@ -21,30 +21,35 @@ class Capability:
     __repr__ = __str__
 
 
+@dataclass
 class CapabilitySet:
-    def __init__(
-        self,
-        graph: dict[str, list[str]],
-        auto_admin: bool = True,
-        user_file: Path = None,
-        user_overrides: dict[str, list[str]] = None,
-        default_capabilities: list[str] = None,
-        guest_capabilities: list[str] = None,
-    ):
+    graph: dict[str, list[str]]
+    auto_admin: bool = True
+    user_file: Path = None
+    user_overrides: dict[str, list[str]] = field(default_factory=dict)
+    default_capabilities: list[str] = field(default_factory=list)
+    guest_capabilities: list[str] = field(default_factory=list)
+
+    # [serieux: ignore]
+    registry: Registry = None
+
+    # [serieux: ignore]
+    captype: type = None
+
+    def __post_init__(self):
         self.registry = Registry()
-        for name in graph:
+        for name in self.graph:
             self.registry.register(name, Capability(name))
-        for name, implies in graph.items():
+        for name, implies in self.graph.items():
             self[name].implies.update(self[n] for n in implies)
-        if auto_admin:
+        if self.auto_admin:
             self.registry.register(
                 "admin", Capability("admin", set(self.registry.registry.values()))
             )
         self.captype = Capability @ self.registry
-        self.user_file = user_file
-        self.user_overrides = deserialize(dict[str, set[self.captype]], user_overrides or {})
-        self.default_capabilities = deserialize(set[self.captype], default_capabilities or [])
-        self.guest_capabilities = deserialize(set[self.captype], guest_capabilities or [])
+        self._user_overrides = deserialize(dict[str, set[self.captype]], self.user_overrides)
+        self._default_capabilities = deserialize(set[self.captype], self.default_capabilities)
+        self._guest_capabilities = deserialize(set[self.captype], self.guest_capabilities)
 
     def __getitem__(self, item):
         return self.registry.registry[item]
@@ -59,8 +64,8 @@ class CapabilitySet:
     def check(self, email, cap):
         if email is None:
             # Guest user (not authenticated)
-            return cap in Capability(implies=self.guest_capabilities)
+            return cap in Capability(implies=self._guest_capabilities)
 
         caps = self.db.value.get(email, set())
-        overrides = self.user_overrides.get(email, set())
-        return cap in Capability(implies={*caps, *overrides, *self.default_capabilities})
+        overrides = self._user_overrides.get(email, set())
+        return cap in Capability(implies={*caps, *overrides, *self._default_capabilities})
