@@ -198,15 +198,16 @@ class OAuthManager:
     # User management routes #
     ##########################
 
-    def _manage_cap_response(self, email):
+    def _get_user_capabilities(self, email):
         db = self.capabilities.db
+        return serialize(set[self.capabilities.captype], db.value.get(email, set()))
+
+    def _manage_cap_response(self, email):
         return JSONResponse(
             {
                 "status": "ok",
                 "email": email,
-                "capabilities": serialize(
-                    set[self.capabilities.captype], db.value.get(email, set())
-                ),
+                "capabilities": self._get_user_capabilities(email),
             }
         )
 
@@ -255,7 +256,7 @@ class OAuthManager:
 
         return await self._manage_generic(request, SetRequest)
 
-    async def route_manage_capabilities_list(self, request):
+    async def route_manage_capabilities_list_user(self, request):
         user = await self.get_email(request)
 
         @dataclass
@@ -268,6 +269,20 @@ class OAuthManager:
             self.ensure_user_manager(user)
 
         return self._manage_cap_response(req.email)
+
+    async def route_manage_capabilities_list(self, request: Request):
+        user = await self.get_email(request)
+        self.ensure_user_manager(user)
+
+        users_capabilities = {}
+        for email in self.capabilities.db.value.keys():
+            users_capabilities[email] = self._get_user_capabilities(email)
+
+        graph = self.capabilities.graph.copy()
+        if self.capabilities.auto_admin:
+            graph.setdefault("admin", list(graph.keys()))
+
+        return JSONResponse({"status": "ok", "users": users_capabilities, "graph": graph})
 
     ##################
     # Install to app #
@@ -313,5 +328,10 @@ class OAuthManager:
             )
 
         app.add_route(
-            f"{self.prefix}/manage_capabilities/list", self.route_manage_capabilities_list
+            f"{self.prefix}/manage_capabilities/list_user",
+            self.route_manage_capabilities_list_user,
+        )
+        app.add_route(
+            f"{self.prefix}/manage_capabilities/list",
+            self.route_manage_capabilities_list,
         )
