@@ -1,6 +1,6 @@
 [project]
 name = "easy-oauth"
-version = "0.0.2"
+version = "0.0.3"
 description = "Easy OAuth authentication for Starlette/FastAPI apps"
 readme = "README.md"
 authors = [
@@ -27,7 +27,7 @@ dev = [
     "pytest>=9.0.1",
     "pytest-cov>=7.0.0",
     "pytest-freezer>=0.4.9",
-    "python-multipart>=0.0.20",
+    "python-multipart>=0.0.30",
     "uvicorn>=0.38.0",
 ]
 
