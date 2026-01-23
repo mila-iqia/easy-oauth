@@ -135,6 +135,44 @@ def test_capability_admin(app, query):
 
 
 @queries(
+    D(user="boss@corleone.com", caps={"mafia"}, status=403),
+    D(user="admin@admin.admin", caps={"admin"}),
+)
+def test_manage_list(app, query):
+    u = app.client(query.user)
+    email = query.email or query.user
+    response = u.get("/manage_capabilities/list", email=email, expect=query.status)
+    if query.status is None:
+        res = response.json()
+        assert res["status"] == "ok"
+        assert deserialize(dict[str, set], res["users"]) == {
+            "hubert.bonjour@courrier-chaud.fr": {"villager"},
+            "boss@corleone.com": {"mafia"},
+            "paul.baguette@corleone.com": {"mafia", "baker"},
+            "wiggum@springfield.us": {"police"},
+            "admin@admin.admin": {"admin"},
+        }
+        assert deserialize(dict[str, set], res["graph"]) == {
+            "user_management": set(),
+            "traveller": set(),
+            "villager": set(),
+            "mafia": {"villager"},
+            "police": {"villager"},
+            "mayor": {"villager", "police"},
+            "baker": {"villager"},
+            "admin": {
+                "user_management",
+                "traveller",
+                "villager",
+                "mafia",
+                "police",
+                "mayor",
+                "baker",
+            },
+        }
+
+
+@queries(
     # Trying to view own capabilities
     D(user="boss@corleone.com", caps={"mafia"}),
     D(user="paul.baguette@corleone.com", caps={"mafia", "baker"}),
@@ -145,10 +183,10 @@ def test_capability_admin(app, query):
     D(user="boss@corleone.com", email="hubert.bonjour@courrier-chaud.fr", status=403),
     D(user="admin@admin.admin", email="hubert.bonjour@courrier-chaud.fr", caps={"villager"}),
 )
-def test_manage_list(app, query):
+def test_manage_list_user(app, query):
     u = app.client(query.user)
     email = query.email or query.user
-    response = u.get("/manage_capabilities/list", email=email, expect=query.status)
+    response = u.get("/manage_capabilities/list_user", email=email, expect=query.status)
     if query.status is None:
         assert response.json()["email"] == email
         assert set(response.json()["capabilities"]) == query.caps
