@@ -171,3 +171,7 @@ class TokenInteractor:
     def post(self, endpoint, expect=None, **data):
         response = httpx.post(f"{self.root}{endpoint}", headers=self.headers, json=data)
         return self.expect(response, expect)
+
+    def delete(self, endpoint, expect=None, **data):
+        response = httpx.delete(f"{self.root}{endpoint}", headers=self.headers, json=data)
+        return self.expect(response, expect)
