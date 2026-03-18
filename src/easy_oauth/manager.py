@@ -138,6 +138,8 @@ class OAuthManager:
 
     async def assimilate_payload(self, request):
         token = await self.oauth.authorize_access_token(request)
+        if "userinfo" not in token and "id_token" in token:  # pragma: no cover
+            token["userinfo"] = token["id_token"]
         payload = deserialize(Payload, token)
 
         if payload.userinfo:
