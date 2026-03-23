@@ -1,6 +1,6 @@
 [project]
 name = "easy-oauth"
-version = "0.0.4"
+version = "0.0.5"
 description = "Easy OAuth authentication for Starlette/FastAPI apps"
 readme = "README.md"
 authors = [
