@@ -202,7 +202,9 @@ class OAuthManager:
                 )
             email = await self.get_email(request)
             self.ensure_user_manager(email)
-            caps = self._get_user_capabilities(svc_user)
+            svc_raw_caps = self.capabilities.db.value.get(svc_user, set())
+            allowed_caps = {cap for cap in svc_raw_caps if self.capabilities.check(email, cap)}
+            caps = serialize(set[self.capabilities.captype], allowed_caps)
             salt = secrets.token_urlsafe(8)
             svc_token = self.secrets_serializer.dumps([svc_user, list(caps), salt])
             return JSONResponse(

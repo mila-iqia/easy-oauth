@@ -538,6 +538,28 @@ def test_service_token_invalid_user_format(app_write):
     _get_service_token(app_write, admin.headers, "notaservice@example.com", expect=400)
 
 
+def test_service_token_capped_by_user_manager_capabilities(app_write):
+    admin = app_write.client("admin@admin.admin")
+    # Give wiggum user_management so they can issue service tokens (wiggum has police, not baker)
+    admin.post(
+        "/manage_capabilities/add", email="wiggum@springfield.us", capability="user_management"
+    )
+    # Service account has both baker (wiggum lacks) and police (wiggum has)
+    admin.post("/manage_capabilities/set", email="bot@service", capabilities=["baker", "police"])
+
+    wiggum = app_write.client("wiggum@springfield.us")
+    resp = _get_service_token(app_write, wiggum.headers, "bot@service")
+    data = resp.json()
+
+    # baker must be stripped because wiggum doesn't have it; police must survive
+    assert "baker" not in data["capabilities"]
+    assert "police" in data["capabilities"]
+
+    bot = TokenInteractor(app_write.base_url, "bot@service", data["service_token"])
+    bot.get("/bake", food="bread", expect=403)  # baker was stripped
+    bot.get("/farm", expect=200)  # villager (implied by police) still works
+
+
 def test_service_token_reflects_implied_capabilities(app_write):
     # "mafia" implies "villager"; token with "mafia" should grant villager-guarded endpoints
     admin = app_write.client("admin@admin.admin")
