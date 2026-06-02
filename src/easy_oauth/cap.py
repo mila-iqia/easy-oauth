@@ -69,3 +69,11 @@ class CapabilitySet:
         caps = self.db.value.get(email, set())
         overrides = self._user_overrides.get(email, set())
         return cap in Capability(implies={*caps, *overrides, *self._default_capabilities})
+
+    def check_service(self, email, token_cap_names: list[str], cap) -> bool:
+        valid_caps = {
+            self.registry.registry[name]
+            for name in token_cap_names
+            if name in self.registry.registry
+        }
+        return (cap in Capability(implies=valid_caps)) and self.check(email, cap)

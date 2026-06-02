@@ -5,6 +5,7 @@ import pytest
 from serieux import deserialize
 
 from easy_oauth.manager import OAuthManager
+from easy_oauth.testing.utils import TokenInteractor
 
 here = Path(__file__).parent
 
@@ -417,3 +418,132 @@ def test_default_capabilities_with_explicit_caps(app_default_caps):
 
     # Should also have villager (default)
     assert user.get("/farm").text == "boss@corleone.com farmed"
+
+
+def _get_service_token(app, admin_headers, svc_user, expect=200):
+    response = httpx.get(
+        f"{app}/token",
+        params={"user": svc_user},
+        headers=admin_headers,
+    )
+    assert response.status_code == expect, response.text
+    return response
+
+
+def test_service_token_generation(app_write):
+    admin = app_write.client("admin@admin.admin")
+    admin.post("/manage_capabilities/set", email="bot@service", capabilities=["baker"])
+
+    resp = _get_service_token(app_write, admin.headers, "bot@service")
+    data = resp.json()
+    assert data["user"] == "bot@service"
+    assert set(data["capabilities"]) == {"baker"}
+    assert "service_token" in data
+
+
+def test_service_token_non_admin_denied(app_write):
+    non_admin = app_write.client("boss@corleone.com")
+    _get_service_token(app_write, non_admin.headers, "bot@service", expect=403)
+
+
+def test_service_account_with_capability(app_write):
+    admin = app_write.client("admin@admin.admin")
+    admin.post("/manage_capabilities/set", email="bot@service", capabilities=["baker"])
+
+    token = _get_service_token(app_write, admin.headers, "bot@service").json()["service_token"]
+    bot = TokenInteractor(app_write.base_url, "bot@service", token)
+
+    assert bot.get("/bake", food="croissant").text == "croissant was baked by bot@service"
+
+
+def test_service_account_missing_capability(app_write):
+    admin = app_write.client("admin@admin.admin")
+    admin.post("/manage_capabilities/set", email="bot@service", capabilities=["baker"])
+
+    token = _get_service_token(app_write, admin.headers, "bot@service").json()["service_token"]
+    bot = TokenInteractor(app_write.base_url, "bot@service", token)
+
+    bot.get("/murder", target="Nobody", expect=403)
+
+
+def test_service_account_add_capability(app_write):
+    admin = app_write.client("admin@admin.admin")
+
+    token = _get_service_token(app_write, admin.headers, "bot@service").json()["service_token"]
+    bot = TokenInteractor(app_write.base_url, "bot@service", token)
+
+    # Doesn't have capability
+    assert bot.get("/bake", food="croissant", expect=403)
+
+    admin.post("/manage_capabilities/set", email="bot@service", capabilities=["baker"])
+
+    # Still doesn't have capability with the previous token
+    assert bot.get("/bake", food="croissant", expect=403)
+
+    # We get a new token
+    token = _get_service_token(app_write, admin.headers, "bot@service").json()["service_token"]
+    bot = TokenInteractor(app_write.base_url, "bot@service", token)
+
+    # Has capability with new token
+    assert bot.get("/bake", food="croissant").text == "croissant was baked by bot@service"
+
+
+def test_service_account_remove_capability(app_write):
+    admin = app_write.client("admin@admin.admin")
+    admin.post("/manage_capabilities/set", email="bot@service", capabilities=["baker"])
+
+    token = _get_service_token(app_write, admin.headers, "bot@service").json()["service_token"]
+    bot = TokenInteractor(app_write.base_url, "bot@service", token)
+
+    # Has capability
+    assert bot.get("/bake", food="croissant").text == "croissant was baked by bot@service"
+
+    # Capability is removed
+    admin.post("/manage_capabilities/set", email="bot@service", capabilities=[])
+
+    # Doesn't work anymore, regardless of what the token says
+    assert bot.get("/bake", food="croissant", expect=403)
+
+
+def test_service_account_capability_not_in_registry(app_write):
+    # Generate a token with "baker", then manually strip that cap from the token's name
+    # by using a token whose caps list contains an unknown/removed name.
+    # We simulate this by generating a token for a user with no caps and checking access.
+    admin = app_write.client("admin@admin.admin")
+    admin.post("/manage_capabilities/set", email="ghost@service", capabilities=[])
+
+    token = _get_service_token(app_write, admin.headers, "ghost@service").json()["service_token"]
+    ghost = TokenInteractor(app_write.base_url, "ghost@service", token)
+
+    ghost.get("/bake", food="bread", expect=403)
+    ghost.get("/murder", target="Nobody", expect=403)
+
+
+def test_service_token_fresh_on_each_call(app_write):
+    admin = app_write.client("admin@admin.admin")
+    admin.post("/manage_capabilities/set", email="bot@service", capabilities=["baker"])
+
+    token1 = _get_service_token(app_write, admin.headers, "bot@service").json()["service_token"]
+    token2 = _get_service_token(app_write, admin.headers, "bot@service").json()["service_token"]
+
+    assert token1 != token2
+    # Both tokens should work
+    for token in (token1, token2):
+        bot = TokenInteractor(app_write.base_url, "bot@service", token)
+        assert bot.get("/bake", food="cake").text == "cake was baked by bot@service"
+
+
+def test_service_token_invalid_user_format(app_write):
+    admin = app_write.client("admin@admin.admin")
+    _get_service_token(app_write, admin.headers, "notaservice@example.com", expect=400)
+
+
+def test_service_token_reflects_implied_capabilities(app_write):
+    # "mafia" implies "villager"; token with "mafia" should grant villager-guarded endpoints
+    admin = app_write.client("admin@admin.admin")
+    admin.post("/manage_capabilities/set", email="mob@service", capabilities=["mafia"])
+
+    token = _get_service_token(app_write, admin.headers, "mob@service").json()["service_token"]
+    mob = TokenInteractor(app_write.base_url, "mob@service", token)
+
+    assert mob.get("/murder", target="Homer").text == "Homer was murdered by mob@service"

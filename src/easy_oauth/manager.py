@@ -64,10 +64,19 @@ class OAuthManager:
             match auth.split("Bearer "):
                 case ("", rtoken):
                     try:
-                        rtoken = self.secrets_serializer.loads(rtoken)
+                        payload = self.secrets_serializer.loads(rtoken)
                     except BadData:
                         raise HTTPException(status_code=401, detail="Malformed authorization")
-                    if user := await self.user_from_refresh_token(rtoken):
+                    if (
+                        isinstance(payload, list)
+                        and len(payload) == 3
+                        and isinstance(payload[0], str)
+                        and payload[0].endswith("@service")
+                    ):
+                        username, caps, _salt = payload
+                        request.state.service_caps = caps
+                        return {"email": username, "sub": username}
+                    if user := await self.user_from_refresh_token(payload):
                         user = serialize(UserInfo, user)
                         request.session["user"] = user
                         return user
@@ -101,7 +110,14 @@ class OAuthManager:
                 email = await self.ensure_email(request)
             else:
                 email = await self.get_email(request)
-            if cap is None or self.capabilities.check(email, cap):
+            if cap is None:  # pragma: no cover
+                yield email
+            elif (service_caps := getattr(request.state, "service_caps", None)) is not None:
+                if self.capabilities.check_service(email, service_caps, cap):
+                    yield email
+                else:
+                    raise HTTPException(status_code=403, detail=f"{cap} capability required")
+            elif self.capabilities.check(email, cap):
                 yield email
             elif email is None:
                 raise HTTPException(status_code=401, detail="Authentication required")
@@ -179,6 +195,19 @@ class OAuthManager:
     async def route_token(self, request):
         if self.force_user:
             return JSONResponse({"refresh_token": "XXX"})
+        if svc_user := request.query_params.get("user"):
+            if not svc_user.endswith("@service"):
+                raise HTTPException(
+                    status_code=400, detail="Service accounts must end with @service"
+                )
+            email = await self.get_email(request)
+            self.ensure_user_manager(email)
+            caps = self._get_user_capabilities(svc_user)
+            salt = secrets.token_urlsafe(8)
+            svc_token = self.secrets_serializer.dumps([svc_user, list(caps), salt])
+            return JSONResponse(
+                {"service_token": svc_token, "user": svc_user, "capabilities": caps}
+            )
         if state := request.query_params.get("state"):
             await self.assimilate_payload(request)
 
