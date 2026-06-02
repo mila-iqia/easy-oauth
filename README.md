@@ -107,6 +107,53 @@ assert httpx.get(f"{app_url}/something", headers={"Authorization": f"Bearer {tok
 ```
 
 
+### Service accounts
+
+Service accounts are non-human accounts intended for automated scripts or bots. Their usernames must end with `@service` (e.g. `bot@service`).
+
+**Creating a service token**
+
+An admin (a user with the `user_management` capability) first assigns capabilities to the service account, then fetches a token for it by hitting `GET /token?user=<service-account>` while authenticated:
+
+```python
+import httpx
+
+# Assign capabilities
+httpx.post(f"{app_url}/manage_capabilities/set",
+           json={"email": "bot@service", "capabilities": ["baker"]},
+           headers=admin_headers)
+
+# Get a service token
+resp = httpx.get(f"{app_url}/token", params={"user": "bot@service"}, headers=admin_headers)
+service_token = resp.json()["service_token"]
+```
+
+The response includes the token, the username, and the capabilities baked into it:
+```json
+{"service_token": "<encrypted_token>", "user": "bot@service", "capabilities": ["baker"]}
+```
+
+**Using a service token**
+
+Pass the service token as a Bearer token, exactly like a regular user token:
+
+```python
+bot_headers = {"Authorization": f"Bearer {service_token}"}
+httpx.get(f"{app_url}/bake", params={"food": "croissant"}, headers=bot_headers)
+```
+
+**Capability semantics**
+
+Access is granted only when both of the following are true:
+
+1. The requested capability is covered by the capabilities **embedded in the token** (snapshotted at creation time, including implied capabilities).
+2. The service account **currently has** the requested capability in the database.
+
+This means:
+- Adding a new capability to the service account requires generating a fresh token before it takes effect.
+- Removing a capability from the database immediately revokes access, regardless of what the token says.
+
+
 ### Reading configuration from a file
 
 The configuration for the above OAuthManager can be written in a file, like this:
@@ -185,6 +232,8 @@ The OAuthManager automatically adds the following routes when installed on your 
 - **GET `/token`**
   - Returns an encrypted refresh token for the authenticated user
   - Response: `{"refresh_token": "<encrypted_token>"}`
+  - Query parameters:
+    - `user` (optional): If set to a `@service` account name, returns a service token for that account instead (requires user management capability). Response: `{"service_token": "<encrypted_token>", "user": "<service-account>", "capabilities": [...]}`
 
 - **GET `/logout`**
   - Clears the user session and redirects to `/`
